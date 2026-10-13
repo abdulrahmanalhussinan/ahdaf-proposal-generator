@@ -308,11 +308,28 @@ def closing_slide(d: Deck, doc: dict, settings: dict):
 
 
 def _local(url):
-    """Map an uploaded file URL (/files/<name>) to its path on disk."""
+    """Map an image reference to a file on disk: /files/<name> uploads, or data: URLs (browser build)."""
+    if url and str(url).startswith("data:image/"):
+        return _from_data_url(str(url))
     if not url or not str(url).startswith("/files/"):
         return None
     p = UPLOADS / Path(str(url)).name
     return p if p.exists() else None
+
+
+def _from_data_url(url: str):
+    import base64
+    import hashlib
+    import tempfile
+    header, _, payload = url.partition(",")
+    ext = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}.get(header[5:].split(";")[0])
+    if not ext or ";base64" not in header:
+        return None  # SVG and non-base64 payloads are not embeddable in PowerPoint
+    data = base64.b64decode(payload)
+    path = Path(tempfile.gettempdir()) / f"ahdaf-img-{hashlib.sha1(data).hexdigest()[:16]}{ext}"
+    if not path.exists():
+        path.write_bytes(data)
+    return path
 
 
 # ---------------------------------------------------------------------- block layout

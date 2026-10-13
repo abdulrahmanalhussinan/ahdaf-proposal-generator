@@ -22,6 +22,7 @@
   --fs: 13.5px; --fs-sm: 12px; --fs-xs: 11px; --h2: 28px; --lead: 19px; --cols: 2;
 }
 .doc *, .doc *::before, .doc *::after { box-sizing: border-box; }
+.doc, .doc * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .doc p, .doc h1, .doc h2, .doc h3, .doc h4, .doc ul, .doc ol { margin: 0; }
 
 .pg {

@@ -1,13 +1,13 @@
 import { html, useEffect, useRef, useState } from '../vendor/preact-htm.js';
 import { icon } from '../lib/icons.js';
 import { STATUS } from '../lib/format.js';
-import { store, useStore, link } from '../lib/store.js';
+import { store, useStore, link, hrefOf } from '../lib/store.js';
 
 export const Icon = ({ name, size = 18 }) => html`<span style="display:inline-flex" dangerouslySetInnerHTML=${{ __html: icon(name, size) }} />`;
 
 export function Btn({ kind = 'light', size, icon: ic, children, block, href, ...rest }) {
   const cls = ['btn', kind, size, block ? 'block' : '', !children ? 'icon' : ''].filter(Boolean).join(' ');
-  if (href) return html`<a class=${cls} href=${href} onClick=${(e) => link(e, href)} ...${rest}>${ic && html`<${Icon} name=${ic} />`}${children}</a>`;
+  if (href) return html`<a class=${cls} href=${hrefOf(href)} onClick=${(e) => link(e, href)} ...${rest}>${ic && html`<${Icon} name=${ic} />`}${children}</a>`;
   return html`<button type="button" class=${cls} ...${rest}>${ic && html`<${Icon} name=${ic} />`}${children}</button>`;
 }
 

@@ -1,6 +1,6 @@
 import { html, useEffect, useRef, useState } from '../vendor/preact-htm.js';
 import { api } from '../lib/api.js';
-import { navigate, toast, toastError, confirmDialog, useStore, link } from '../lib/store.js';
+import { navigate, toast, toastError, confirmDialog, useStore, link, hrefOf } from '../lib/store.js';
 import { relTime, STATUS } from '../lib/format.js';
 import { Btn, Icon, Input, TextArea, Select, Switch, Seg, Menu, Modal, ImagePicker, Spinner, Empty, setTitle } from '../components/ui.js';
 import { BlockEditor, BLOCK_LABELS, BLOCK_ICONS, NEW_BLOCKS, rid, countPlaceholders } from '../components/block-editors.js';
@@ -150,7 +150,7 @@ export function Editor({ params }) {
 
   return html`<div>
     <div class="ed-bar">
-      <a class="btn ghost icon" href="/proposals" onClick=${(e) => link(e, '/proposals')} aria-label="رجوع"><${Icon} name="arrowRight" /></a>
+      <a class="btn ghost icon" href=${hrefOf('/proposals')} onClick=${(e) => link(e, '/proposals')} aria-label="رجوع"><${Icon} name="arrowRight" /></a>
       <div class="ttl"><b title=${p.project_name}>${doc.cover?.title || p.project_name}</b><span>${p.client_name} · <span class="ltr">${p.number}</span> · نسخة ${doc.cover?.version || p.version}</span></div>
       <${Select} value=${p.status} onChange=${setStatus} options=${Object.entries(STATUS).map(([k, v]) => ({ value: k, label: v.label }))} style="width:auto;padding-top:6px;padding-bottom:6px" aria-label="حالة العرض" />
       <span class="save-state" aria-live="polite">${save === 'saving' ? html`<span class="spinner" style="width:12px;height:12px"></span>` : html`<${Icon} name=${save === 'error' ? 'alert' : save === 'saved' ? 'check' : 'clock'} size=${15} />`}${saveLabel}</span>
@@ -257,7 +257,7 @@ function MissingBanner({ placeholders, missing, id }) {
       <span> — لم يخترع النظام هذه المعلومات. عبّئ الحقول المظللة بالأصفر في المعاينة، أو أكمل المدخلات وأعد التوليد.</span>
       ${missing.length > 0 && html` <button class="btn ghost sm" style="padding:0 6px" onClick=${() => setOpen(!open)}>${open ? 'إخفاء التفاصيل' : 'التفاصيل'}</button>`}
       ${open && html`<div class="missing-list">${missing.map((m) => html`<div><b>${m.label}:</b><span>${m.hint}</span></div>`)}
-        <div><a href=${`/proposals/${id}/inputs`} onClick=${(e) => link(e, `/proposals/${id}/inputs`)}>إكمال المدخلات وإعادة التوليد</a></div></div>`}
+        <div><a href=${hrefOf(`/proposals/${id}/inputs`)} onClick=${(e) => link(e, `/proposals/${id}/inputs`)}>إكمال المدخلات وإعادة التوليد</a></div></div>`}
     </div></div>`;
 }
 

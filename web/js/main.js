@@ -12,6 +12,8 @@ import { Templates } from './views/templates.js';
 import { Clients } from './views/clients.js';
 import { Library } from './views/library.js';
 import { Settings } from './views/settings.js';
+import { STATIC } from './lib/env.js';
+import { logoSVG } from './lib/brand.js';
 
 const ROUTES = [
   ['/', Dashboard],
@@ -41,6 +43,11 @@ function App() {
     if (params) { view = html`<${Comp} params=${params} query=${query} path=${path} />`; opts = o || {}; break; }
   }
   if (!meta) {
+    if (STATIC && !store.get().metaError) {
+      return html`<div class="boot" role="status"><div><span dangerouslySetInnerHTML=${{ __html: logoSVG('#fff', 56) }}></span>
+        <h1 style="font-size:24px;margin-top:22px">مولّد العروض الفنية</h1>
+        <p>جارٍ تجهيز النظام داخل متصفحك. أول زيارة تستغرق بضع ثوانٍ، والزيارات التالية أسرع.</p><span class="spinner"></span></div></div>`;
+    }
     return html`<div style="min-height:100vh;display:grid;place-items:center;color:var(--muted)">${store.get().metaError
       ? html`<${Empty} icon="alert" title="تعذر تحميل النظام" text=${store.get().metaError} />` : html`<${Spinner} />`}</div>`;
   }

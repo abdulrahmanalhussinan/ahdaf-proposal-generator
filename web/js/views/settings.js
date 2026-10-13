@@ -1,6 +1,7 @@
 import { html, useEffect, useState } from '../vendor/preact-htm.js';
 import { api } from '../lib/api.js';
 import { toast, toastError, useStore } from '../lib/store.js';
+import { STATIC } from '../lib/env.js';
 import { Btn, Icon, Input, TextArea, Select, Seg, Spinner, setTitle } from '../components/ui.js';
 
 export function Settings() {
@@ -52,7 +53,8 @@ export function Settings() {
         <div class="field"><span class="lbl">خط ملفات PowerPoint</span><${Select} value=${v.pptx_font} onChange=${(x) => set('pptx_font', x)} options=${[{ value: 'Saudi Serif VF', label: 'Saudi Serif VF (خط الهوية كما هو مثبت على أجهزة الفريق)' }, { value: 'Saudi Serif', label: 'Saudi Serif (النسخة الثابتة من خط الهوية)' }, { value: 'Segoe UI', label: 'Segoe UI (متوفر في Windows)' }, { value: 'Tahoma', label: 'Tahoma' }]} /></div>
       </section>
       <section class="card-ui pad stack"><h3>الكتابة بالذكاء الاصطناعي</h3>
-        ${ai?.enabled ? html`<div class="notice ok"><${Icon} name="check" /><span>مفعّلة عبر Claude (${ai.model}). يحسّن النموذج صياغة النصوص بعد بنائها بالمحرك الداخلي، مع حماية تمنع إضافة أرقام أو معلومات غير موجودة في المدخلات.</span></div>`
+        ${STATIC ? html`<div class="notice info"><${Icon} name="info" /><span>هذه نسخة المتصفح: تعمل بمحرك الكتابة الداخلي، وكل العروض محفوظة على هذا الجهاز فقط. ربط الذكاء الاصطناعي متاح في نسخة الخادم (start.bat) لأن المفاتيح لا توضع في المتصفح.</span></div>`
+          : ai?.enabled ? html`<div class="notice ok"><${Icon} name="check" /><span>مفعّلة عبر Claude (${ai.model}). يحسّن النموذج صياغة النصوص بعد بنائها بالمحرك الداخلي، مع حماية تمنع إضافة أرقام أو معلومات غير موجودة في المدخلات.</span></div>`
           : html`<div class="notice info"><${Icon} name="info" /><div>يعمل النظام الآن بمحرك الكتابة الداخلي، وهو يكتب العروض كاملة دون اتصال خارجي. لتفعيل تحسين الصياغة عبر Claude أضف المفتاح في ملف <b class="ltr">.env</b> على الخادم:
             <pre class="ltr" style="background:#fff;border-radius:8px;padding:8px 12px;margin:8px 0 0;text-align:left">ANTHROPIC_API_KEY=sk-ant-...</pre><span style="font-size:13px">لا يُدخل المفتاح من هذه الصفحة حمايةً له؛ يبقى على الخادم ولا يصل إلى المتصفح.</span></div></div>`}
       </section>

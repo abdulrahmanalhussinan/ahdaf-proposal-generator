@@ -7,56 +7,24 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
 
 from app import config
-from app.ai import provider as ai
 from app.core.schemas import ClientIn, LibraryItemIn, SettingsIn, TemplateIn
 from app.core.security import User, get_current_user
 from app.data import repositories as repo
-from app.generator.analyzer import DETAILS, TONES
-from app.generator.engine import SECTION_TITLES
-from app.generator.knowledge.platforms import PLATFORM_ORDER, PLATFORMS
-from app.generator.knowledge.project_types import PROJECT_TYPES, TYPE_ORDER
-from app.generator.knowledge.services import CATEGORIES
-from app.services.proposals import STATUSES
+from app.services import catalog
+from app.services.catalog import LIBRARY_LABELS
 
 router = APIRouter(prefix="/api", tags=["resources"])
-
-LIBRARY_LABELS = {
-    "services": "الخدمات", "deliverables": "المخرجات المتكررة", "methodologies": "منهجيات العمل",
-    "kpis": "مؤشرات الأداء", "intro_templates": "قوالب المقدمة", "conclusion_templates": "قوالب الخاتمة",
-    "roles": "المسميات الوظيفية", "past_projects": "المشاريع السابقة", "sectors": "القطاعات",
-}
-
-# Settings the browser may change. Anything else (keys, paths) is server-only.
-EDITABLE_SETTINGS = {
-    "company_name", "company_name_short", "company_name_en", "tagline", "website", "email", "phone", "address",
-    "company_about", "company_stats", "company_stats_note", "company_pillars", "vision", "mission", "default_tone",
-    "default_detail", "default_layout", "proposal_prefix", "pptx_font",
-}
 
 
 # ------------------------------------------------------------------ meta & dashboard
 @router.get("/meta")
 def meta(user: User = Depends(get_current_user)):
-    return {
-        "project_types": [{"key": k, "label": PROJECT_TYPES[k]["label"], "label_en": PROJECT_TYPES[k]["label_en"],
-                           "icon": PROJECT_TYPES[k]["icon"], "default_days": PROJECT_TYPES[k]["default_days"],
-                           "default_services": PROJECT_TYPES[k]["default_services"]} for k in TYPE_ORDER],
-        "tones": [{"key": k, "label": v} for k, v in TONES.items()],
-        "details": [{"key": k, "label": v} for k, v in DETAILS.items()],
-        "statuses": [{"key": k, "label": v} for k, v in STATUSES.items()],
-        "categories": [{"key": k, **v} for k, v in CATEGORIES.items()],
-        "platforms": [{"key": k, "label": PLATFORMS[k]["label"]} for k in PLATFORM_ORDER],
-        "sections": SECTION_TITLES,
-        "library_kinds": [{"key": k, "label": v} for k, v in LIBRARY_LABELS.items()],
-        "ai": ai.status(),
-        "user": {"name": user.name, "role": user.role},
-    }
+    return catalog.meta(user.name, user.role)
 
 
 @router.get("/dashboard")
 def dashboard(user: User = Depends(get_current_user)):
-    return {"stats": repo.proposals.stats(), "recent": repo.proposals.list(limit=6),
-            "library": repo.library.counts(), "templates": len(repo.templates.list())}
+    return catalog.dashboard()
 
 
 # ------------------------------------------------------------------ library
@@ -68,8 +36,7 @@ def _kind(kind: str) -> str:
 
 @router.get("/library")
 def library_overview(user: User = Depends(get_current_user)):
-    counts = repo.library.counts()
-    return {"kinds": [{"key": k, "label": v, "count": counts.get(k, 0)} for k, v in LIBRARY_LABELS.items()]}
+    return catalog.library_overview()
 
 
 @router.get("/library/{kind}")
@@ -160,15 +127,12 @@ def templates_delete(tid: str, user: User = Depends(get_current_user)):
 # ------------------------------------------------------------------ settings
 @router.get("/settings")
 def settings_get(user: User = Depends(get_current_user)):
-    values = {k: v for k, v in repo.settings.get_all().items() if k in EDITABLE_SETTINGS}
-    return {"values": values, "ai": ai.status()}
+    return catalog.settings_values()
 
 
 @router.put("/settings")
 def settings_put(body: SettingsIn, user: User = Depends(get_current_user)):
-    clean = {k: v for k, v in body.values.items() if k in EDITABLE_SETTINGS}
-    repo.settings.set_many(clean)
-    return settings_get(user)
+    return catalog.save_settings(body.values)
 
 
 # ------------------------------------------------------------------ uploads

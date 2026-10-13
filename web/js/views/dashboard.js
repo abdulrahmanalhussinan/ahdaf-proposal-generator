@@ -1,6 +1,6 @@
 import { html, useEffect, useState } from '../vendor/preact-htm.js';
 import { api } from '../lib/api.js';
-import { link, navigate, toastError } from '../lib/store.js';
+import { link, navigate, toastError, hrefOf } from '../lib/store.js';
 import { relTime } from '../lib/format.js';
 import { Btn, Icon, StatusBadge, Menu, Empty, setTitle } from '../components/ui.js';
 import { rowMenu } from './actions.js';
@@ -31,7 +31,7 @@ export function Dashboard() {
       ].map(([l, v]) => html`<div class="card-ui stat"><div class="v">${v ?? (data ? 0 : '—')}</div><div class="l">${l}</div></div>`)}
     </div>
 
-    <div class="section-title"><h2>آخر العروض</h2><a href="/proposals" onClick=${(e) => link(e, '/proposals')}>كل العروض</a></div>
+    <div class="section-title"><h2>آخر العروض</h2><a href=${hrefOf('/proposals')} onClick=${(e) => link(e, '/proposals')}>كل العروض</a></div>
     <div class="card-ui">
       ${!data ? html`<div style="padding:18px" class="stack">${[1, 2, 3].map(() => html`<div class="skeleton" style="height:44px"></div>`)}</div>`
         : data.recent.length === 0 ? html`<${Empty} title="لا توجد عروض بعد" text="أنشئ أول عرض فني وسيظهر هنا." action=${html`<${Btn} kind="primary" icon="plus" href="/new">إنشاء عرض</${Btn}>`} />`
@@ -50,7 +50,7 @@ export function Dashboard() {
         ['/library', 'book', 'مكتبة المحتوى', 'الخدمات والمخرجات والمنهجيات والمؤشرات التي يستخدمها النظام'],
         ['/clients', 'users', 'العملاء', `${st?.clients ?? ''} عميل وعروضهم`],
         ['/settings', 'settings', 'الإعدادات', 'بيانات الشركة والأسلوب الافتراضي للعروض'],
-      ].map(([to, ic, t, d]) => html`<a class="card-ui" href=${to} onClick=${(e) => link(e, to)}><span class="qi"><${Icon} name=${ic} /></span><b>${t}</b><span>${d}</span></a>`)}
+      ].map(([to, ic, t, d]) => html`<a class="card-ui" href=${hrefOf(to)} onClick=${(e) => link(e, to)}><span class="qi"><${Icon} name=${ic} /></span><b>${t}</b><span>${d}</span></a>`)}
     </div>
   </div>`;
 }

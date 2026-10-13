@@ -1,5 +1,6 @@
 // Minimal shared state: app metadata, toasts and confirm dialogs, plus the path router.
 import { useEffect, useState } from '../vendor/preact-htm.js';
+import { STATIC } from './env.js';
 
 function createStore(initial) {
   let state = initial;
@@ -38,19 +39,38 @@ export function confirmDialog(opts) {
 
 // ---------------------------------------------------------------- router
 const routeSubs = new Set();
+
+function current() {
+  if (STATIC) {
+    const h = location.hash.replace(/^#/, '') || '/';
+    const [p, qs = ''] = h.split('?');
+    return { path: p || '/', search: qs ? `?${qs}` : '' };
+  }
+  return { path: location.pathname, search: location.search };
+}
+
+/** URL to put in an <a href> for an in-app route. */
+export const hrefOf = (to) => (STATIC ? `#${to}` : to);
+
 export function navigate(to, { replace = false } = {}) {
-  if (to === location.pathname + location.search) return;
-  if (replace) history.replaceState(null, '', to); else history.pushState(null, '', to);
-  routeSubs.forEach((f) => f());
+  const c = current();
+  if (to === c.path + c.search) return;
+  if (STATIC) {
+    if (replace) location.replace(`#${to}`); else location.hash = to;
+  } else {
+    if (replace) history.replaceState(null, '', to); else history.pushState(null, '', to);
+    routeSubs.forEach((f) => f());
+  }
   window.scrollTo(0, 0);
   store.set({ navOpen: false });
 }
-window.addEventListener('popstate', () => routeSubs.forEach((f) => f()));
+window.addEventListener(STATIC ? 'hashchange' : 'popstate', () => routeSubs.forEach((f) => f()));
 
 export function useRoute() {
   const [, force] = useState(0);
   useEffect(() => { const f = () => force((n) => n + 1); routeSubs.add(f); return () => routeSubs.delete(f); }, []);
-  return { path: location.pathname, query: new URLSearchParams(location.search) };
+  const c = current();
+  return { path: c.path, query: new URLSearchParams(c.search) };
 }
 
 export function link(e, to) {

@@ -2,6 +2,7 @@
 touches SQL, so moving to PostgreSQL later means re-implementing that layer only."""
 from __future__ import annotations
 
+import os
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -105,7 +106,8 @@ _conn: sqlite3.Connection | None = None
 def _connect(path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
+    if os.getenv("AHDAF_SQLITE_WAL", "1") != "0":  # the in-browser build has no shared memory for WAL
+        conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
 

@@ -1,4 +1,4 @@
 /* AHDAF brand typeface ("Saudi"), the same files ahdaf.co serves. */
-@font-face { font-family: "Saudi"; src: url("/assets/fonts/saudi-regular.woff2") format("woff2"); font-weight: 400; font-display: block; }
-@font-face { font-family: "Saudi"; src: url("/assets/fonts/saudi-medium.woff2") format("woff2"); font-weight: 500; font-display: block; }
-@font-face { font-family: "Saudi"; src: url("/assets/fonts/saudi-bold.woff2") format("woff2"); font-weight: 700; font-display: block; }
+@font-face { font-family: "Saudi"; src: url("../assets/fonts/saudi-regular.woff2") format("woff2"); font-weight: 400; font-display: block; }
+@font-face { font-family: "Saudi"; src: url("../assets/fonts/saudi-medium.woff2") format("woff2"); font-weight: 500; font-display: block; }
+@font-face { font-family: "Saudi"; src: url("../assets/fonts/saudi-bold.woff2") format("woff2"); font-weight: 700; font-display: block; }
