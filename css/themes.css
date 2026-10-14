@@ -1,0 +1,92 @@
+/* ==========================================================================
+   Proposal designs (doc.theme). "ahdaf" is the base in document.css;
+   night, bold and minimal override it. Used by preview, viewer and PDF alike.
+   ========================================================================== */
+
+/* ---------- 2. night: dark luxury pages ---------- */
+.doc[data-theme="night"] { --ink: #EEE7FB; --muted: #B6A9CF; --line: rgba(255,255,255,.12); }
+.doc[data-theme="night"] .pg--content { background: radial-gradient(130% 120% at 100% 0%, #2B0560 0%, #18033A 45%, #0F0226 100%); color: var(--ink); }
+.doc[data-theme="night"] .pg--cover, .doc[data-theme="night"] .pg--divider, .doc[data-theme="night"] .pg--closing { background: radial-gradient(120% 140% at 85% 0%, #3A0A78 0%, #1A033F 55%, #0B011C 100%); }
+.doc[data-theme="night"] .pg-title h2 { color: #fff; }
+.doc[data-theme="night"] .pg-title.cont h2 { color: #E6D6FF; }
+.doc[data-theme="night"] .pg-kicker { color: #C6A0FF; }
+.doc[data-theme="night"] .b-lead { color: #fff; }
+.doc[data-theme="night"] .b-title { color: #E6D6FF; }
+.doc[data-theme="night"] .card, .doc[data-theme="night"] .obj, .doc[data-theme="night"] .ph-row, .doc[data-theme="night"] .stp, .doc[data-theme="night"] .toc { background: rgba(255,255,255,.06); box-shadow: inset 0 0 0 1px rgba(183,123,255,.22); }
+.doc[data-theme="night"] .card h4, .doc[data-theme="night"] .obj h4, .doc[data-theme="night"] .ph-t h4, .doc[data-theme="night"] .tm h4, .doc[data-theme="night"] .toc h4, .doc[data-theme="night"] .stp h4 { color: #E6D6FF; }
+.doc[data-theme="night"] .card p, .doc[data-theme="night"] .obj p, .doc[data-theme="night"] .stp p, .doc[data-theme="night"] .tm li, .doc[data-theme="night"] .ph-acts li { color: #D6CBEA; }
+.doc[data-theme="night"] .card .ic, .doc[data-theme="night"] .tm .av { background: rgba(183,123,255,.18); color: #E6D6FF; }
+.doc[data-theme="night"] .obj .meta { border-top-color: rgba(255,255,255,.14); }
+.doc[data-theme="night"] .obj .meta b, .doc[data-theme="night"] .stp .n { color: #E6D6FF; }
+.doc[data-theme="night"] .obj .tgt, .doc[data-theme="night"] .ph-t .per, .doc[data-theme="night"] .ph-out span.chip { background: rgba(255,255,255,.1); color: #fff; }
+.doc[data-theme="night"] .svc, .doc[data-theme="night"] .tm { background: rgba(255,255,255,.04); border-color: rgba(183,123,255,.22); }
+.doc[data-theme="night"] .svc-h { background: rgba(183,123,255,.14); color: #E6D6FF; }
+.doc[data-theme="night"] .svc-h .ic { color: #E6D6FF; }
+.doc[data-theme="night"] .svc li b, .doc[data-theme="night"] .tbl td.strong, .doc[data-theme="night"] .g-lbl .act { color: #fff; }
+.doc[data-theme="night"] .tbl td { border-bottom-color: rgba(255,255,255,.1); }
+.doc[data-theme="night"] .tbl tr:nth-child(even) td { background: rgba(255,255,255,.03); }
+.doc[data-theme="night"] .tbl .qty, .doc[data-theme="night"] .tbl b { color: #E6D6FF !important; }
+.doc[data-theme="night"] .g-row { border-bottom-color: rgba(255,255,255,.1); }
+.doc[data-theme="night"] .g-lbl .phn, .doc[data-theme="night"] .g-own { color: #D9C2FF; }
+.doc[data-theme="night"] .g-ms { background: rgba(183,123,255,.12); }
+.doc[data-theme="night"] .g-ms .g-lbl { color: #E6D6FF; }
+.doc[data-theme="night"] .pg-foot .num { color: #C6A0FF; }
+.doc[data-theme="night"] .b-list li::before { background: rgba(183,123,255,.3); box-shadow: inset 0 0 0 3px #C6A0FF; }
+.doc[data-theme="night"] .pg-deco path { fill: #fff; }
+
+/* ---------- 3. bold: split cover, purple title band, framed cards ---------- */
+.doc[data-theme="bold"] .pg--cover { background: linear-gradient(to left, #4C0192 0 60%, #fff 60% 100%); }
+.doc[data-theme="bold"] .pg--cover .deco-waves { display: none; }
+.doc[data-theme="bold"] .pg--cover .deco-mark { opacity: 1; width: 330px; height: 330px; left: 70px !important; bottom: auto !important; top: 50%; transform: translateY(-50%); }
+.doc[data-theme="bold"] .pg--cover .deco-mark path { fill: #4C0192; }
+.doc[data-theme="bold"][data-layout="portrait"] .pg--cover { background: linear-gradient(to bottom, #4C0192 0 64%, #fff 64% 100%); }
+.doc[data-theme="bold"][data-layout="portrait"] .pg--cover .deco-mark { width: 220px; height: 220px; left: 56px !important; top: auto; bottom: 60px !important; transform: none; }
+.doc[data-theme="bold"] .cover-main { max-width: 640px; }
+.doc[data-theme="bold"] .cover-main h1 { font-size: 58px; }
+.doc[data-theme="bold"] .cover-foot { max-width: 60%; grid-template-columns: repeat(2, auto); }
+.doc[data-theme="bold"] .cover-foot .site { display: none; }
+.doc[data-theme="bold"][data-layout="portrait"] .cover-foot { max-width: 100%; }
+.doc[data-theme="bold"] .pg--content .pg-head { margin: calc(var(--pad-top) * -1) calc(var(--pad-x) * -1) 24px; padding: calc(var(--pad-top) - 8px) var(--pad-x) 22px; background: #4C0192; }
+.doc[data-theme="bold"] .pg--content .pg-title h2, .doc[data-theme="bold"] .pg--content .pg-title.cont h2 { color: #fff; }
+.doc[data-theme="bold"] .pg--content .pg-title.cont h2 span { color: #D9C2FF; }
+.doc[data-theme="bold"] .pg--content .pg-kicker { color: #D9C2FF; }
+.doc[data-theme="bold"] .pg--content .pg-kicker::after { background: #fff; }
+.doc[data-theme="bold"] .pg--content .pg-title .sub { color: #E6D6FF; }
+.doc[data-theme="bold"] .pg--content .pg-brand .sep { background: rgba(255,255,255,.35); }
+.doc[data-theme="bold"] .card, .doc[data-theme="bold"] .obj, .doc[data-theme="bold"] .stp, .doc[data-theme="bold"] .toc { background: #fff; box-shadow: inset 0 0 0 1.5px #E2D6F5; border-top: 5px solid #4C0192; }
+.doc[data-theme="bold"] .ph-row { background: #fff; box-shadow: inset 0 0 0 1.5px #E2D6F5; }
+.doc[data-theme="bold"] .tbl th { background: #2B0560; }
+.doc[data-theme="bold"] .b-callout { background: #2B0560; }
+.doc[data-theme="bold"] .stp .n { font-size: 30px; }
+.doc[data-theme="bold"] .div-num { font-size: 96px; line-height: 1; color: rgba(255,255,255,.35); }
+.doc[data-theme="bold"] .div-num::after { display: none; }
+
+/* ---------- 4. minimal: white, thin lines, typographic ---------- */
+.doc[data-theme="minimal"] .pg--cover, .doc[data-theme="minimal"] .pg--divider, .doc[data-theme="minimal"] .pg--closing { background: #fff; color: var(--b-deep); }
+.doc[data-theme="minimal"] .deco-waves { display: none; }
+.doc[data-theme="minimal"] .deco-mark { opacity: .06; }
+.doc[data-theme="minimal"] .deco-mark path { fill: #4C0192; }
+.doc[data-theme="minimal"] .pg-photo::after { background: linear-gradient(180deg, rgba(255,255,255,.86), rgba(255,255,255,.94)); }
+.doc[data-theme="minimal"] .cover-kicker { color: var(--b-mid); }
+.doc[data-theme="minimal"] .cover-main h1 { color: #4C0192; }
+.doc[data-theme="minimal"] .cover-main p { color: var(--muted); }
+.doc[data-theme="minimal"] .cover-foot { border-top-color: var(--line); }
+.doc[data-theme="minimal"] .cover-foot span { color: var(--muted); }
+.doc[data-theme="minimal"] .cover-foot b { color: var(--ink); }
+.doc[data-theme="minimal"] .cover-top .client-pill { box-shadow: inset 0 0 0 1px var(--line); }
+.doc[data-theme="minimal"] .div-num { color: var(--b-mid); }
+.doc[data-theme="minimal"] .div-in h2, .doc[data-theme="minimal"] .close-in h2 { color: #4C0192; }
+.doc[data-theme="minimal"] .div-in p, .doc[data-theme="minimal"] .close-in p, .doc[data-theme="minimal"] .close-in .tag { color: var(--muted); }
+.doc[data-theme="minimal"] .close-contacts { color: var(--ink); }
+.doc[data-theme="minimal"] .pg--content { border-top: 6px solid #4C0192; }
+.doc[data-theme="minimal"] .card, .doc[data-theme="minimal"] .obj, .doc[data-theme="minimal"] .stp, .doc[data-theme="minimal"] .ph-row, .doc[data-theme="minimal"] .toc { background: #fff; box-shadow: inset 0 0 0 1px var(--line); }
+.doc[data-theme="minimal"] .card .ic { background: transparent; box-shadow: inset 0 0 0 1px var(--lilac-3); }
+.doc[data-theme="minimal"] .svc-h { background: #fff; border-bottom: 1px solid var(--line); }
+.doc[data-theme="minimal"] .tbl th { background: transparent; color: #4C0192; border-bottom: 2px solid #4C0192; border-radius: 0 !important; font-weight: 700; }
+.doc[data-theme="minimal"] .tbl tr:nth-child(even) td { background: transparent; }
+.doc[data-theme="minimal"] .g-head { background: transparent; color: #4C0192; border-bottom: 2px solid #4C0192; border-radius: 0; }
+.doc[data-theme="minimal"] .g-head .g-dates { color: #4C0192 !important; }
+.doc[data-theme="minimal"] .b-callout { background: var(--lilac); color: var(--ink); }
+.doc[data-theme="minimal"] .b-callout .lbl { background: #4C0192; color: #fff; }
+.doc[data-theme="minimal"] .b-stats .st { background: #fff !important; color: #4C0192; box-shadow: inset 0 0 0 1px var(--lilac-3); }
+.doc[data-theme="minimal"] .b-stats .l { color: var(--muted); opacity: 1; }
