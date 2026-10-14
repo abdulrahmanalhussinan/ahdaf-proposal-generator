@@ -1,4 +1,4 @@
-"""First-run seeding: company settings, content library, proposal templates and DEMO data.
+"""First-run seeding: company settings and the content library. (Demo data exists for tests only.)
 
 Company text and figures below are taken verbatim from AHDAF's own technical proposal
 («متجر شادن – نسخة 4») and ahdaf.co. Demo clients/proposals are fictional and flagged `is_demo`."""
@@ -61,45 +61,6 @@ CONCLUSION_TEMPLATES = [
      "نحن جاهزون للبدء. بعد الاعتماد مباشرة نحدد موعد اجتماع الانطلاق مع فريق {العميل}."),
 ]
 
-TEMPLATE_PRESETS = [
-    ("إدارة حسابات التواصل — 6 أشهر", "تشغيل الحسابات وصناعة المحتوى والريلز وإدارة المجتمع والتقارير الشهرية.", "social_media",
-     {"project": {"type": "social_media", "platforms": ["tiktok", "instagram", "snapchat"]},
-      "services": {"selected": ["social_management", "content_strategy", "content_creation", "reels", "community_management", "reporting"]},
-      "timeline": {"duration_value": 6, "duration_unit": "month"}}),
-    ("تنظيم فعالية أو حفل", "من المفهوم والتجهيزات والدعوات إلى إدارة يوم الفعالية وتغطيتها.", "event",
-     {"project": {"type": "event"},
-      "services": {"selected": ["event_management", "event_production", "guest_management", "event_coverage", "project_management"]},
-      "timeline": {"duration_value": 6, "duration_unit": "week"}}),
-    ("حملة علاقات عامة — 3 أشهر", "رسائل إعلامية وبيانات صحفية وعلاقات إعلامية ورصد.", "pr",
-     {"project": {"type": "pr"},
-      "services": {"selected": ["press_releases", "media_relations", "media_monitoring", "crisis_management", "reporting"]},
-      "timeline": {"duration_value": 3, "duration_unit": "month"}}),
-    ("حملة مؤثرين لإطلاق منتج", "ترشيح وتعاقد وإحاطة ومتابعة وقياس، مع محتوى UGC.", "influencer",
-     {"project": {"type": "influencer", "platforms": ["snapchat", "tiktok", "instagram"]},
-      "services": {"selected": ["influencer_marketing", "creative_concept", "ugc", "paid_ads", "reporting"]},
-      "timeline": {"duration_value": 6, "duration_unit": "week"}}),
-    ("حملة موسمية متكاملة", "فكرة مركزية وإنتاج وإعلانات ومؤثرون لموسم محدد.", "campaign",
-     {"project": {"type": "campaign"},
-      "services": {"selected": ["marketing_strategy", "creative_concept", "video_production", "paid_ads", "influencer_marketing", "reporting"]},
-      "timeline": {"duration_value": 2, "duration_unit": "month"}}),
-    ("إنتاج فيلم تعريفي", "سيناريو وتصوير ومونتاج ونسخ للمنصات.", "production",
-     {"project": {"type": "production"},
-      "services": {"selected": ["video_production", "photography", "copywriting", "project_management"]},
-      "timeline": {"duration_value": 4, "duration_unit": "week"}}),
-    ("هوية بصرية جديدة", "اكتشاف واستراتيجية ومفاهيم ودليل هوية وتطبيقات.", "branding",
-     {"project": {"type": "branding"},
-      "services": {"selected": ["branding", "market_research", "project_management"]},
-      "timeline": {"duration_value": 6, "duration_unit": "week"}}),
-    ("جناح في معرض", "تصميم وتنفيذ الجناح والمطبوعات والتغطية.", "exhibition",
-     {"project": {"type": "exhibition"},
-      "services": {"selected": ["booth_design", "event_production", "print_design", "event_coverage", "project_management"]},
-      "timeline": {"duration_value": 5, "duration_unit": "week"}}),
-    ("حملات أداء رقمية — 3 أشهر", "إعلانات ممولة بتتبع دقيق وتحسين أسبوعي.", "digital_ads",
-     {"project": {"type": "digital_ads", "platforms": ["snapchat", "tiktok", "google"]},
-      "services": {"selected": ["paid_ads", "social_design", "ugc", "reporting"]},
-      "timeline": {"duration_value": 3, "duration_unit": "month"}}),
-]
-
 DEMO_CLIENTS = [
     {"name": "شركة مسارات لتأجير السيارات (تجريبي)", "sector": "automotive", "contact_name": "مدير التسويق (تجريبي)",
      "about": "شركة تأجير سيارات تعمل في عدة مدن، وتقدم التأجير اليومي والشهري للأفراد والشركات."},
@@ -148,14 +109,6 @@ DEMO_PROPOSALS = [
         "preferences": {"tone": "corporate", "detail": "brief", "include_about": False}}},
 ]
 
-PAST_PROJECTS_DEMO = [
-    {"title": "إدارة حسابات علامة مطاعم", "sector": "food_beverage", "project_type": "social_media", "year": "2025",
-     "summary": "مثال توضيحي: إدارة حسابات وصناعة محتوى شهري لعلامة مطاعم.", "results": ""},
-    {"title": "حفل تدشين مشروع سكني", "sector": "real_estate", "project_type": "event", "year": "2025",
-     "summary": "مثال توضيحي: تنظيم حفل تدشين مع تغطية إعلامية.", "results": ""},
-]
-
-
 def search_text_for(record: dict, meta: dict) -> str:
     year = (record.get("created_at") or "")[:4]
     parts = [record.get("number", ""), record.get("client_name", ""), record.get("project_name", ""),
@@ -195,13 +148,6 @@ def seed_library() -> None:
         lib.create("intro_templates", title, {"tone": tone, "text": text}, sort=i)
     for i, (title, tone, text) in enumerate(CONCLUSION_TEMPLATES):
         lib.create("conclusion_templates", title, {"tone": tone, "text": text}, sort=i)
-    for i, p in enumerate(PAST_PROJECTS_DEMO):
-        lib.create("past_projects", p["title"], {k: v for k, v in p.items() if k != "title"}, sort=i, is_demo=True)
-
-
-def seed_templates() -> None:
-    for name, desc, ptype, inputs in TEMPLATE_PRESETS:
-        repo.templates.create(name, desc, ptype, inputs, is_builtin=True)
 
 
 def seed_demo() -> None:
@@ -218,11 +164,26 @@ def seed_demo() -> None:
                                today=date.fromisoformat(created[:10]), seed=7 + p["client"])
 
 
-def ensure_seeded(with_demo: bool = True) -> None:
+DATA_VERSION = 2  # v2: no demo data in the product, design templates instead of input presets
+
+
+def purge_demo() -> None:
+    """Remove the demo clients/proposals/past projects and the old built-in input templates."""
+    repo.proposals.delete_demo()
+    repo.clients.delete_demo()
+    repo.library.delete_demo()
+    repo.templates.delete_builtin()
+
+
+def ensure_seeded(with_demo: bool = False) -> None:
+    """with_demo is for tests only; the product starts empty."""
     if repo.settings.get("company_name") is None:
         repo.settings.set_many(DEFAULT_SETTINGS)
     if repo.library.is_empty():
         seed_library()
-        seed_templates()
         if with_demo:
             seed_demo()
+        repo.settings.set_many({"data_version": DATA_VERSION})
+    elif int(repo.settings.get("data_version", 1) or 1) < DATA_VERSION:
+        purge_demo()
+        repo.settings.set_many({"data_version": DATA_VERSION})

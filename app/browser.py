@@ -276,7 +276,7 @@ def _settings_put(q, b):
 
 # ------------------------------------------------------------------ entry points
 def init() -> None:
-    ensure_seeded(with_demo=True)
+    ensure_seeded()
 
 
 def handle(method: str, path: str, query_json: str = "{}", body_json: str = "null") -> str:

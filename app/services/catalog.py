@@ -6,6 +6,8 @@ from app.ai import provider as ai
 from app.data import repositories as repo
 from app.generator.analyzer import DETAILS, TONES
 from app.generator.engine import SECTION_TITLES
+from app.generator.knowledge.ideas import SEGMENTS
+from app.generator.knowledge.objectives import DEFAULTS_BY_TYPE, OBJECTIVES
 from app.generator.knowledge.platforms import PLATFORM_ORDER, PLATFORMS
 from app.generator.knowledge.project_types import PROJECT_TYPES, TYPE_ORDER
 from app.generator.knowledge.services import CATEGORIES
@@ -37,6 +39,9 @@ def meta(user_name: str, user_role: str) -> dict:
         "platforms": [{"key": k, "label": PLATFORMS[k]["label"]} for k in PLATFORM_ORDER],
         "sections": SECTION_TITLES,
         "library_kinds": [{"key": k, "label": v} for k, v in LIBRARY_LABELS.items()],
+        "segments": SEGMENTS,
+        "objectives": [{"key": k, "label": v["label"]} for k, v in OBJECTIVES.items()],
+        "default_objectives": DEFAULTS_BY_TYPE,
         "ai": ai.status(),
         "user": {"name": user_name, "role": user_role},
     }

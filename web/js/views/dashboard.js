@@ -16,10 +16,10 @@ export function Dashboard() {
     <section class="hero">
       <div class="copy">
         <h1>عرض فني جاهز للعميل، من معلومات المشروع مباشرة</h1>
-        <p>أدخل بيانات المشروع، وسيكتب النظام العرض كاملًا بهوية أهداف: الفهم، والأهداف، والمنهجية، والجدول الزمني، والمخرجات، والمؤشرات. راجعه وعدّله ثم صدّره PDF.</p>
+        <p>اكتب اسم العميل والمشروع ونوعه، والنظام يقترح الفكرة الإبداعية والأفكار التفعيلية والأهداف والجمهور والخطة كاملة بهوية أهداف. راجعه وعدّله ثم صدّره PDF.</p>
         <div class="actions">
           <${Btn} kind="on-dark" size="lg" icon="filePlus" href="/new">إنشاء عرض جديد</${Btn}>
-          <${Btn} kind="light" size="lg" icon="layout" href="/templates" class="btn glass lg">البدء من قالب</${Btn}>
+          <${Btn} kind="light" size="lg" icon="layout" href="/templates" class="btn glass lg">اختر التصميم أولًا</${Btn}>
         </div>
       </div>
       <div class="stairs" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
@@ -34,7 +34,7 @@ export function Dashboard() {
     <div class="section-title"><h2>آخر العروض</h2><a href=${hrefOf('/proposals')} onClick=${(e) => link(e, '/proposals')}>كل العروض</a></div>
     <div class="card-ui">
       ${!data ? html`<div style="padding:18px" class="stack">${[1, 2, 3].map(() => html`<div class="skeleton" style="height:44px"></div>`)}</div>`
-        : data.recent.length === 0 ? html`<${Empty} title="لا توجد عروض بعد" text="أنشئ أول عرض فني وسيظهر هنا." action=${html`<${Btn} kind="primary" icon="plus" href="/new">إنشاء عرض</${Btn}>`} />`
+        : data.recent.length === 0 ? html`<${Empty} title="لا توجد عروض بعد" text="ابدأ بأول عرض فني: اسم العميل والمشروع يكفيان، والنظام يقترح الباقي." action=${html`<${Btn} kind="primary" icon="plus" href="/new">إنشاء عرض</${Btn}>`} />`
         : html`<div class="table-wrap"><table class="table"><thead><tr><th>العميل والمشروع</th><th>النوع</th><th>الحالة</th><th>آخر تعديل</th><th></th></tr></thead><tbody>
           ${data.recent.map((p) => html`<tr class="clickable" onClick=${() => navigate(`/proposals/${p.id}/edit`)}>
             <td><div class="t-main">${p.project_name}${p.is_demo && html`<span class="tag-demo">Demo</span>`}</div><div class="t-sub">${p.client_name}</div></td>
@@ -46,7 +46,7 @@ export function Dashboard() {
     <div class="section-title"><h2>أدوات العمل</h2></div>
     <div class="quick">
       ${[
-        ['/templates', 'layout', 'القوالب', `${data?.templates ?? ''} قالب جاهز لأنواع المشاريع المتكررة`],
+        ['/templates', 'layout', 'القوالب', 'أربعة تصاميم للعرض الفني تختار منها'],
         ['/library', 'book', 'مكتبة المحتوى', 'الخدمات والمخرجات والمنهجيات والمؤشرات التي يستخدمها النظام'],
         ['/clients', 'users', 'العملاء', `${st?.clients ?? ''} عميل وعروضهم`],
         ['/settings', 'settings', 'الإعدادات', 'بيانات الشركة والأسلوب الافتراضي للعروض'],

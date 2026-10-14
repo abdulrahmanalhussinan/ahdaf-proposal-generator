@@ -4,7 +4,7 @@ import { navigate, toast, toastError, confirmDialog, useStore, link, hrefOf } fr
 import { relTime, STATUS } from '../lib/format.js';
 import { Btn, Icon, Input, TextArea, Select, Switch, Seg, Menu, Modal, ImagePicker, Spinner, Empty, setTitle } from '../components/ui.js';
 import { BlockEditor, BLOCK_LABELS, BLOCK_ICONS, NEW_BLOCKS, rid, countPlaceholders } from '../components/block-editors.js';
-import { renderDocument } from '../document/render.js';
+import { renderDocument, DESIGNS } from '../document/render.js';
 import { exportFile, duplicate, remove } from './actions.js';
 
 const SAVE_DELAY = 800;
@@ -165,7 +165,6 @@ export function Editor({ params }) {
         { label: 'عرض للقراءة', icon: 'eye', onClick: async () => { await flush(); navigate(`/proposals/${p.id}`); } },
         '-',
         { label: 'نسخ العرض', icon: 'copy', onClick: async () => { await flush(); duplicate(p); } },
-        { label: 'حفظ كقالب', icon: 'layout', onClick: () => setTplModal(true) },
         '-',
         { label: 'حذف العرض', icon: 'trash', danger: true, onClick: () => remove(p, () => navigate('/proposals')) },
       ]} />
@@ -181,6 +180,7 @@ export function Editor({ params }) {
 
       <main class="ed-main">
         ${(placeholders > 0 || missing.length > 0) && html`<${MissingBanner} placeholders=${placeholders} missing=${missing} id=${p.id} />`}
+        ${(p.meta?.suggested || []).length > 0 && html`<${SuggestedNote} items=${p.meta.suggested} id=${p.id} />`}
         ${sel === '__cover' ? html`<${CoverEditor} doc=${doc} updateDoc=${updateDoc} />` : section ? html`
           <div class="sec-head">
             <div class="fields">
@@ -261,6 +261,14 @@ function MissingBanner({ placeholders, missing, id }) {
     </div></div>`;
 }
 
+function SuggestedNote({ items, id }) {
+  const [hidden, setHidden] = useState(false);
+  if (hidden) return null;
+  return html`<div class="notice info" style="margin-bottom:16px"><${Icon} name="wand" />
+    <div style="flex:1">اقترح النظام بنفسه: <b>${items.join('، ')}</b>. كل ذلك قابل للتعديل هنا، أو من <a href=${hrefOf(`/proposals/${id}/inputs`)} onClick=${(e) => link(e, `/proposals/${id}/inputs`)}>مدخلات المشروع</a>.</div>
+    <button class="btn ghost icon sm" aria-label="إخفاء" onClick=${() => setHidden(true)}><${Icon} name="x" size=${15} /></button></div>`;
+}
+
 function CoverEditor({ doc, updateDoc }) {
   const c = doc.cover || {};
   const setC = (patch) => updateDoc((d) => ({ ...d, cover: { ...d.cover, ...patch } }));
@@ -280,6 +288,8 @@ function CoverEditor({ doc, updateDoc }) {
       <div class="field"><span class="lbl">شعار العميل</span><${ImagePicker} value=${c.client_logo} onChange=${(v) => setC({ client_logo: v })} onUpload=${api.upload} label="رفع الشعار" /></div>
     </div>
     <div class="blk-ed stack">
+      <div class="field"><span class="lbl">تصميم العرض</span>
+        <div class="chips">${Object.entries(DESIGNS).map(([k, d]) => html`<button type="button" class=${`chip ${(doc.theme || 'ahdaf') === k ? 'on' : ''}`} onClick=${() => updateDoc((x) => ({ ...x, theme: k }))}>${d.name}</button>`)}</div></div>
       <div class="field"><span class="lbl">شكل الصفحات</span><${Seg} value=${doc.layout || 'landscape'} onChange=${(v) => updateDoc((d) => ({ ...d, layout: v }))} options=${[{ value: 'landscape', label: 'أفقي 16:9' }, { value: 'portrait', label: 'مستند A4' }]} /></div>
       <${Switch} checked=${doc.show_toc !== false} onChange=${(v) => updateDoc((d) => ({ ...d, show_toc: v }))} label="صفحة محتويات العرض" />
     </div>

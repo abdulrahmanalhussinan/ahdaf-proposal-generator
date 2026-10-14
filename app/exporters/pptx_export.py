@@ -31,6 +31,32 @@ INK, INK2, MUTED, WHITE = "1E1630", "3B3350", "6E6585", "FFFFFF"
 HL = "FFF1B8"
 LVL = {"hi": ("FBE6E3", "C0392B"), "md": ("FDF3DC", "9A6412"), "lo": ("E6F4EC", "2F855A")}
 
+# The four proposal designs (doc.theme). T holds the active palette while a deck is built.
+THEMES = {
+    "ahdaf": dict(bg=WHITE, title=PURPLE, kicker=MID, sub=MUTED, text=INK, strong=DEEP, muted=MUTED, line=LINE, num=PURPLE,
+                  card=LILAC, card_line=None, card_bar=False, card_title=PURPLE, card_text=INK2, callout=PURPLE, callout_text=WHITE,
+                  head_bg=PURPLE, head_text=WHITE, row=WHITE, row_alt="FBF9FE", logo_page="logo-purple.png", band=False,
+                  cover_bg=PURPLE, cover_text=WHITE, cover_sub="EDE3FF", cover_label="CDB8F2", logo_cover="logo-white.png",
+                  mark_cover="mark-white.png", cover_split=False, deco=True),
+    "night": dict(bg="14022E", title=WHITE, kicker="C6A0FF", sub="B6A9CF", text="EEE7FB", strong="E6D6FF", muted="B6A9CF",
+                  line="3A2466", num="C6A0FF", card="241048", card_line="3D2470", card_bar=False, card_title="E6D6FF",
+                  card_text="D6CBEA", callout=PURPLE, callout_text=WHITE, head_bg=PURPLE, head_text=WHITE, row="1A0638",
+                  row_alt="21093F", logo_page="logo-white.png", band=False, cover_bg="1A033F", cover_text=WHITE,
+                  cover_sub="E3D6FA", cover_label="C6A0FF", logo_cover="logo-white.png", mark_cover="mark-white.png",
+                  cover_split=False, deco=False),
+    "bold": dict(bg=WHITE, title=WHITE, kicker="D9C2FF", sub="E6D6FF", text=INK, strong=DEEP, muted=MUTED, line=LINE, num=PURPLE,
+                 card=WHITE, card_line="E2D6F5", card_bar=True, card_title=PURPLE, card_text=INK2, callout=DEEP, callout_text=WHITE,
+                 head_bg=DEEP, head_text=WHITE, row=WHITE, row_alt="FBF9FE", logo_page="logo-white.png", band=True,
+                 cover_bg=PURPLE, cover_text=WHITE, cover_sub="EDE3FF", cover_label="CDB8F2", logo_cover="logo-white.png",
+                 mark_cover="mark-white.png", cover_split=True, deco=False),
+    "minimal": dict(bg=WHITE, title=PURPLE, kicker=MID, sub=MUTED, text=INK, strong=DEEP, muted=MUTED, line=LINE, num=PURPLE,
+                    card=WHITE, card_line=LINE, card_bar=False, card_title=PURPLE, card_text=INK2, callout=LILAC, callout_text=INK,
+                    head_bg=WHITE, head_text=PURPLE, row=WHITE, row_alt=WHITE, logo_page="logo-purple.png", band=False,
+                    cover_bg=WHITE, cover_text=PURPLE, cover_sub=MUTED, cover_label=MUTED, logo_cover="logo-purple.png",
+                    mark_cover="mark-purple.png", cover_split=False, deco=True),
+}
+T: dict = dict(THEMES["ahdaf"])
+
 SW, SH = 13.333, 7.5
 X0, CW = 0.7, 13.333 - 1.4
 Y0, YMAX = 1.62, 6.82
@@ -171,12 +197,12 @@ class Deck:
         for ri, rh in enumerate(row_h, start=1):
             tbl.rows[ri].height = Inches(rh)
         for ci, label in enumerate(header):
-            self._cell(tbl.cell(0, ci), label, size - 0.5, True, WHITE, PURPLE)
+            self._cell(tbl.cell(0, ci), label, size - 0.5, True, T["head_text"], T["head_bg"])
         for ri, row in enumerate(rows, start=1):
             for ci, val in enumerate(row):
                 fmt = (cell_fmt or {}).get(ci, {})
-                bg = fmt.get("bg") or ("FBF9FE" if ri % 2 == 0 else WHITE)
-                color = fmt.get("color") or (DEEP if ci == 0 and first_bold else INK)
+                bg = fmt.get("bg") or (T["row_alt"] if ri % 2 == 0 else T["row"])
+                color = fmt.get("color") or (T["strong"] if ci == 0 and first_bold else T["text"])
                 self._cell(tbl.cell(ri, ci), val, size, ci == 0 and first_bold or fmt.get("bold", False), color, bg,
                            align=fmt.get("align", "r"))
         return total_h
@@ -202,7 +228,7 @@ class Deck:
             for c in list(ln):
                 ln.remove(c)
             sf = etree.SubElement(ln, qn("a:solidFill"))
-            etree.SubElement(sf, qn("a:srgbClr")).set("val", LINE if edge in ("a:lnB", "a:lnT") else bg)
+            etree.SubElement(sf, qn("a:srgbClr")).set("val", T["line"] if edge in ("a:lnB", "a:lnT") else bg)
         # tcPr children must keep schema order: lnL, lnR, lnT, lnB, ..., fill
         fills = [c for c in tcPr if c.tag in (qn("a:solidFill"), qn("a:noFill"))]
         for f in fills:
@@ -231,22 +257,24 @@ def th(text, width_in, pt, lh=1.38) -> float:
 
 # ---------------------------------------------------------------------- slide chrome
 def content_slide(d: Deck, section: dict, num: str, first: bool, ctx: dict):
-    s = d.slide(WHITE)
-    d.pic(s, BRAND / "logo-purple.png", X0, 0.5, h=0.36)
+    s = d.slide(T["bg"])
+    if T["band"]:
+        d.rect(s, 0, 0, SW, 1.52 if first else 1.12, PURPLE, radius=0)
+    d.pic(s, BRAND / T["logo_page"], X0, 0.5, h=0.36)
     if ctx.get("client_logo"):
         d.pic(s, ctx["client_logo"], X0 + 1.55, 0.48, h=0.4)
     tx, tw = 3.4, SW - 3.4 - X0
     if first:
-        d.text(s, tx, 0.28, tw, 0.28, [{"text": f"{num}  ·  {section.get('title_en') or ''}".strip(" ·"), "size": 10.5, "color": MID}], margin=0)
-        d.text(s, tx, 0.52, tw, 0.62, [{"text": section.get("title", ""), "size": 28, "bold": True, "color": PURPLE, "line": 1.0}], margin=0)
+        d.text(s, tx, 0.28, tw, 0.28, [{"text": f"{num}  ·  {section.get('title_en') or ''}".strip(" ·"), "size": 10.5, "color": T["kicker"]}], margin=0)
+        d.text(s, tx, 0.52, tw, 0.62, [{"text": section.get("title", ""), "size": 28, "bold": True, "color": T["title"], "line": 1.0}], margin=0)
         if section.get("subtitle"):
-            d.text(s, tx, 1.12, tw, 0.36, [{"text": section["subtitle"], "size": 12.5, "color": MUTED}], margin=0)
+            d.text(s, tx, 1.12, tw, 0.36, [{"text": section["subtitle"], "size": 12.5, "color": T["sub"]}], margin=0)
     else:
-        d.text(s, tx, 0.48, tw, 0.5, [{"text": f"{section.get('title', '')}  (تابع)", "size": 18, "bold": True, "color": DEEP}], margin=0)
-    d.rect(s, X0, 7.02, CW, 0.012, LINE, radius=0)
-    d.text(s, X0, 7.06, 1.0, 0.3, [{"text": f"{d.page:02d}", "size": 10.5, "bold": True, "color": PURPLE, "align": "l"}], margin=0)
-    d.text(s, SW - X0 - 7, 7.06, 7, 0.3, [{"text": ctx["footer"], "size": 9.5, "color": MUTED}], margin=0)
-    if section.get("type") in ("intro", "conclusion"):
+        d.text(s, tx, 0.48, tw, 0.5, [{"text": f"{section.get('title', '')}  (تابع)", "size": 18, "bold": True, "color": T["title"] if T["band"] else T["strong"]}], margin=0)
+    d.rect(s, X0, 7.02, CW, 0.012, T["line"], radius=0)
+    d.text(s, X0, 7.06, 1.0, 0.3, [{"text": f"{d.page:02d}", "size": 10.5, "bold": True, "color": T["num"], "align": "l"}], margin=0)
+    d.text(s, SW - X0 - 7, 7.06, 7, 0.3, [{"text": ctx["footer"], "size": 9.5, "color": T["muted"]}], margin=0)
+    if T["deco"] and section.get("type") in ("intro", "conclusion"):
         d.pic(s, BRAND / "mark-purple.png", -0.6, 4.6, h=3.4, alpha=0.05)
     return s
 
@@ -254,57 +282,66 @@ def content_slide(d: Deck, section: dict, num: str, first: bool, ctx: dict):
 def purple_bg(d: Deck, s, image=None):
     if image:
         d.pic(s, image, 0, 0, w=SW, h=SH)
-        d.rect(s, 0, 0, SW, SH, DEEP, radius=0, alpha=0.82)
-    d.pic(s, BRAND / "mark-white.png", -0.9, 3.4, h=5.2, alpha=0.08)
+        d.rect(s, 0, 0, SW, SH, WHITE if T["cover_bg"] == WHITE else DEEP, radius=0, alpha=0.86)
+    if T["cover_split"]:
+        d.rect(s, 0, 0, SW * 0.4, SH, WHITE, radius=0)
+        d.pic(s, BRAND / "mark-purple.png", 1.0, 1.9, h=3.6)
+    else:
+        d.pic(s, BRAND / T["mark_cover"], -0.9, 3.4, h=5.2, alpha=0.08)
 
 
 def cover_slide(d: Deck, doc: dict, settings: dict, number: str):
     c = doc.get("cover") or {}
-    s = d.slide(PURPLE)
+    s = d.slide(T["cover_bg"])
     purple_bg(d, s, _local(c.get("image")))
-    d.pic(s, BRAND / "logo-white.png", SW - X0 - 2.1, 0.7, h=0.58)
+    d.pic(s, BRAND / T["logo_cover"], SW - X0 - 2.1, 0.7, h=0.58)
     if _local(c.get("client_logo")):
-        box = d.rect(s, X0, 0.62, 2.0, 0.74, WHITE, radius=0.12)
+        d.rect(s, X0, 0.62, 2.0, 0.74, WHITE, radius=0.12, line=LINE)
         d.pic(s, _local(c["client_logo"]), X0 + 0.2, 0.72, h=0.54)
-    d.text(s, X0, 2.35, CW, 0.4, [{"text": c.get("kicker") or "عرض فني", "size": 15, "color": "E5D6FF"}], margin=0)
-    d.text(s, X0, 2.75, CW, 1.4, [{"text": c.get("title", ""), "size": 46, "bold": True, "color": WHITE, "line": 1.0}], margin=0)
+    text_x = SW * 0.4 + 0.3 if T["cover_split"] else X0
+    text_w = SW - text_x - X0
+    d.text(s, text_x, 2.35, text_w, 0.4, [{"text": c.get("kicker") or "عرض فني", "size": 15, "color": T["cover_label"]}], margin=0)
+    d.text(s, text_x, 2.75, text_w, 1.4, [{"text": c.get("title", ""), "size": 46 if not T["cover_split"] else 40, "bold": True, "color": T["cover_text"], "line": 1.0}], margin=0)
     if c.get("subtitle"):
-        d.text(s, X0 + 2.5, 4.1, CW - 2.5, 0.9, [{"text": c["subtitle"], "size": 17, "color": "EDE3FF"}], margin=0)
-    d.rect(s, X0, 6.0, CW, 0.01, "8C6BC8", radius=0)
+        d.text(s, text_x + (0 if T["cover_split"] else 2.5), 4.1, text_w - (0 if T["cover_split"] else 2.5), 0.9, [{"text": c["subtitle"], "size": 17, "color": T["cover_sub"]}], margin=0)
+    d.rect(s, text_x, 6.0, text_w, 0.01, T["cover_label"], radius=0)
     cols = [("مقدم إلى", c.get("client", "")), ("مقدم من", c.get("prepared_by") or settings.get("company_name", "")),
             ("التاريخ", c.get("date", "")), ("النسخة", f"{c.get('version', '1.0')} · {number}")]
-    colw = 2.6
+    colw = 2.6 if not T["cover_split"] else 1.85
     for i, (k, v) in enumerate(cols):
         x = SW - X0 - (i + 1) * colw - i * 0.15
-        d.text(s, x, 6.15, colw, 0.3, [{"text": k, "size": 10.5, "color": "CDB8F2"}], margin=0)
-        d.text(s, x, 6.43, colw, 0.5, [{"text": v, "size": 12.5, "bold": True, "color": WHITE}], margin=0)
-    d.text(s, X0, 6.15, 2.4, 0.3, [{"text": settings.get("website", "www.ahdaf.co"), "size": 12, "bold": True, "color": WHITE, "align": "l"}], margin=0)
-    d.text(s, X0, 6.43, 2.4, 0.3, [{"text": settings.get("tagline", "نربط الإبداع بالهدف"), "size": 10.5, "color": "CDB8F2", "align": "l"}], margin=0)
+        d.text(s, x, 6.15, colw, 0.3, [{"text": k, "size": 10.5, "color": T["cover_label"]}], margin=0)
+        d.text(s, x, 6.43, colw, 0.5, [{"text": v, "size": 12.5 if not T["cover_split"] else 11, "bold": True, "color": T["cover_text"]}], margin=0)
+    if not T["cover_split"]:
+        d.text(s, X0, 6.15, 2.4, 0.3, [{"text": settings.get("website", "www.ahdaf.co"), "size": 12, "bold": True, "color": T["cover_text"], "align": "l"}], margin=0)
+        d.text(s, X0, 6.43, 2.4, 0.3, [{"text": settings.get("tagline", "نربط الإبداع بالهدف"), "size": 10.5, "color": T["cover_label"], "align": "l"}], margin=0)
 
 
 def divider_slide(d: Deck, section: dict, num: str):
-    s = d.slide(PURPLE)
+    s = d.slide(T["cover_bg"])
     purple_bg(d, s, _local(section.get("image")))
-    d.pic(s, BRAND / "logo-white.png", X0, 0.6, h=0.4)
-    d.text(s, X0, 2.55, CW - 0.4, 0.45, [{"text": num, "size": 17, "color": "D7C2FF"}], margin=0)
-    d.text(s, X0, 3.0, CW - 0.4, 1.2, [{"text": section.get("title", ""), "size": 50, "bold": True, "color": WHITE, "line": 1.0}], margin=0)
+    d.pic(s, BRAND / T["logo_cover"], X0, 0.6, h=0.4)
+    left = SW * 0.4 + 0.3 if T["cover_split"] else X0
+    d.text(s, left, 2.55, SW - left - X0, 0.45, [{"text": num, "size": 17, "color": T["cover_label"]}], margin=0)
+    d.text(s, left, 3.0, SW - left - X0, 1.2, [{"text": section.get("title", ""), "size": 50 if not T["cover_split"] else 40, "bold": True, "color": T["cover_text"], "line": 1.0}], margin=0)
     if section.get("subtitle"):
-        d.text(s, X0 + 3, 4.25, CW - 3.4, 0.8, [{"text": section["subtitle"], "size": 18, "color": "E8DCFF"}], margin=0)
+        d.text(s, left + (0 if T["cover_split"] else 3), 4.25, SW - left - X0 - (0 if T["cover_split"] else 3), 0.8, [{"text": section["subtitle"], "size": 18, "color": T["cover_sub"]}], margin=0)
 
 
 def closing_slide(d: Deck, doc: dict, settings: dict):
-    s = d.slide(PURPLE)
-    purple_bg(d, s)
-    d.pic(s, BRAND / "logo-white.png", SW / 2 - 1.7, 1.4, h=0.95)
-    d.text(s, 1.5, 2.55, SW - 3, 0.4, [{"text": settings.get("tagline", "نربط الإبداع بالهدف"), "size": 16, "color": "E1D0FF", "align": "ctr"}], margin=0)
-    d.text(s, 1.5, 3.3, SW - 3, 1.0, [{"text": "شكرًا لكم", "size": 44, "bold": True, "color": WHITE, "align": "ctr"}], margin=0)
+    s = d.slide(T["cover_bg"])
+    if T["cover_bg"] != WHITE:
+        d.pic(s, BRAND / T["mark_cover"], -0.9, 3.4, h=5.2, alpha=0.08)
+    d.pic(s, BRAND / T["logo_cover"], SW / 2 - 1.7, 1.4, h=0.95)
+    d.text(s, 1.5, 2.55, SW - 3, 0.4, [{"text": settings.get("tagline", "نربط الإبداع بالهدف"), "size": 16, "color": T["cover_label"], "align": "ctr"}], margin=0)
+    d.text(s, 1.5, 3.3, SW - 3, 1.0, [{"text": "شكرًا لكم", "size": 44, "bold": True, "color": T["cover_text"], "align": "ctr"}], margin=0)
     cover = doc.get("cover") or {}
     line = f"نتطلع إلى العمل مع {_plain(cover.get('client'))} على مشروع «{_plain(cover.get('title'))}»."
-    d.text(s, 1.5, 4.35, SW - 3, 0.5, [{"text": line, "size": 15, "color": "E8DCFF", "align": "ctr"}], margin=0)
+    d.text(s, 1.5, 4.35, SW - 3, 0.5, [{"text": line, "size": 15, "color": T["cover_sub"], "align": "ctr"}], margin=0)
     contacts = "    ".join(x for x in [settings.get("website"), settings.get("email"), settings.get("phone")] if x)
-    d.text(s, 1.5, 5.4, SW - 3, 0.4, [{"text": contacts, "size": 13, "color": "F2EAFF", "align": "ctr"}], margin=0)
+    d.text(s, 1.5, 5.4, SW - 3, 0.4, [{"text": contacts, "size": 13, "color": T["cover_text"], "align": "ctr"}], margin=0)
     if settings.get("address"):
-        d.text(s, 1.5, 5.8, SW - 3, 0.4, [{"text": settings["address"], "size": 12, "color": "CDB8F2", "align": "ctr"}], margin=0)
+        d.text(s, 1.5, 5.8, SW - 3, 0.4, [{"text": settings["address"], "size": 12, "color": T["cover_label"], "align": "ctr"}], margin=0)
 
 
 def _local(url):
@@ -364,7 +401,7 @@ def place_block(f: Flow, b: dict):
     d = f.d
     if t in ("paragraph", "lead"):
         size = 18 if t == "lead" else 13.5
-        color = DEEP if t == "lead" else INK
+        color = T["strong"] if t == "lead" else T["text"]
         text = b.get("text", "")
         h = th(text, CW, size, 1.45)
         if h > f.room() and f.fresh is False:
@@ -387,10 +424,10 @@ def place_block(f: Flow, b: dict):
     elif t == "callout":
         h = max(0.6, th(b.get("text"), CW - 2.0, 13.5, 1.45) + 0.3)
         f.ensure(h)
-        d.rect(f.s, X0, f.y, CW, h, PURPLE, radius=0.14)
+        d.rect(f.s, X0, f.y, CW, h, T["callout"], radius=0.14)
         d.rect(f.s, SW - X0 - 1.35, f.y + 0.16, 1.15, 0.32, WHITE, radius=0.16)
         d.text(f.s, SW - X0 - 1.35, f.y + 0.16, 1.15, 0.32, [{"text": b.get("label", "ملاحظة"), "size": 10.5, "bold": True, "color": PURPLE, "align": "ctr"}], anchor="middle", margin=0)
-        d.text(f.s, X0 + 0.25, f.y + 0.12, CW - 1.85, h - 0.2, [{"text": b.get("text", ""), "size": 13.5, "bold": True, "color": WHITE, "line": 1.2}], anchor="middle")
+        d.text(f.s, X0 + 0.25, f.y + 0.12, CW - 1.85, h - 0.2, [{"text": b.get("text", ""), "size": 13.5, "bold": True, "color": T["callout_text"], "line": 1.2}], anchor="middle")
         f.advance(h)
     elif t == "stats":
         items = b.get("items") or []
@@ -428,7 +465,7 @@ def place_list(f: Flow, b: dict):
     items = [str(x) for x in b.get("items") or []]
     if b.get("title"):
         f.ensure(0.8)
-        f.d.text(f.s, X0, f.y, CW, 0.35, [{"text": b["title"], "size": 14, "bold": True, "color": DEEP}])
+        f.d.text(f.s, X0, f.y, CW, 0.35, [{"text": b["title"], "size": 14, "bold": True, "color": T["strong"]}])
         f.advance(0.3)
     two = len(items) > 5 and all(len(x) < 130 for x in items)
     cols = 2 if two else 1
@@ -462,7 +499,7 @@ def place_list(f: Flow, b: dict):
             h = sum(th(x, colw - 0.3, 13, 1.4) + 0.06 for x in part)
             col_h = max(col_h, h)
             x = SW - X0 - (c + 1) * colw - c * 0.4
-            f.d.text(f.s, x, f.y, colw, h, [{"text": t, "size": 13, "color": INK, "bullet": True, "space_after": 5, "line": 1.15} for t in part])
+            f.d.text(f.s, x, f.y, colw, h, [{"text": t, "size": 13, "color": T["text"], "bullet": True, "space_after": 5, "line": 1.15} for t in part])
         f.advance(col_h)
         i += best
         if i < len(items):
@@ -494,7 +531,7 @@ def place_cards(f: Flow, b: dict):
         tsz, bsz = 12, 10
     if b.get("title"):
         f.ensure(1.2)
-        f.d.text(f.s, X0, f.y, CW, 0.35, [{"text": b["title"], "size": 14, "bold": True, "color": DEEP}])
+        f.d.text(f.s, X0, f.y, CW, 0.35, [{"text": b["title"], "size": 14, "bold": True, "color": T["strong"]}])
         f.advance(0.3)
     rows = [items[i:i + cols] for i in range(0, len(items), cols)]
     base = 0
@@ -505,17 +542,19 @@ def place_cards(f: Flow, b: dict):
         f.ensure(h)
         for j, (ttl, body, meta) in enumerate(contents):
             x = SW - X0 - (j + 1) * w - j * GAP
-            f.d.rect(f.s, x, f.y, w, h, LILAC, radius=0.14)
+            f.d.rect(f.s, x, f.y, w, h, T["card"], radius=0.14, line=T["card_line"])
+            if T["card_bar"]:
+                f.d.rect(f.s, x, f.y, w, 0.07, PURPLE, radius=0)
             yy = f.y + 0.14
             th1 = th(ttl, w - 0.36, tsz, 1.3)
-            f.d.text(f.s, x + 0.18, yy, w - 0.36, th1, [{"text": ttl, "size": tsz, "bold": True, "color": PURPLE, "line": 1.05}], margin=0)
+            f.d.text(f.s, x + 0.18, yy, w - 0.36, th1, [{"text": ttl, "size": tsz, "bold": True, "color": T["card_title"], "line": 1.05}], margin=0)
             yy += th1 + 0.04
             bh = th(body, w - 0.36, bsz, 1.45)
             if body:
-                f.d.text(f.s, x + 0.18, yy, w - 0.36, bh, [{"text": line, "size": bsz, "color": INK2, "line": 1.15, "space_after": 2} for line in str(body).split("\n")], margin=0)
+                f.d.text(f.s, x + 0.18, yy, w - 0.36, bh, [{"text": line, "size": bsz, "color": T["card_text"], "line": 1.15, "space_after": 2} for line in str(body).split("\n")], margin=0)
             if meta:
                 f.d.text(f.s, x + 0.18, f.y + h - th(meta, w - 0.36, 10.5, 1.3) - 0.1, w - 0.36, th(meta, w - 0.36, 10.5, 1.3),
-                         [{"text": meta, "size": 10.5, "color": MUTED}], margin=0)
+                         [{"text": meta, "size": 10.5, "color": T["muted"]}], margin=0)
         f.advance(h)
         base += len(row)
 
@@ -529,17 +568,17 @@ def place_phases(f: Flow, b: dict):
         h_title = 0.2 + th(p.get("title"), titw, 14, 1.3) + 0.3 + th(p.get("goal"), titw, 10.5, 1.35)
         h = max(h_acts, h_title) + 0.25
         f.ensure(h)
-        f.d.rect(f.s, X0, f.y, CW, h, LILAC, radius=0.14)
+        f.d.rect(f.s, X0, f.y, CW, h, T["card"], radius=0.14, line=T["card_line"])
         nx = SW - X0 - 0.62
         f.d.rect(f.s, nx, f.y + 0.16, 0.46, 0.46, PURPLE, radius=0.1)
         f.d.text(f.s, nx, f.y + 0.16, 0.46, 0.46, [{"text": f"{(b.get('_offset') or 0) + i + 1:02d}", "size": 13, "bold": True, "color": WHITE, "align": "ctr"}], anchor="middle", margin=0)
         tx = nx - 0.15 - titw
         f.d.text(f.s, tx, f.y + 0.12, titw, h - 0.2, [
-            {"text": p.get("title", ""), "size": 14, "bold": True, "color": PURPLE, "line": 1.05},
-            {"text": p.get("period", ""), "size": 10.5, "color": MID, "space_after": 3},
-            {"text": p.get("goal", ""), "size": 10.5, "color": MUTED, "line": 1.15}], margin=0)
+            {"text": p.get("title", ""), "size": 14, "bold": True, "color": T["card_title"], "line": 1.05},
+            {"text": p.get("period", ""), "size": 10.5, "color": T["kicker"] if T["bg"] != WHITE else MID, "space_after": 3},
+            {"text": p.get("goal", ""), "size": 10.5, "color": T["muted"], "line": 1.15}], margin=0)
         f.d.text(f.s, X0 + 0.2, f.y + 0.12, actw - 0.4, h - 0.2,
-                 [{"text": a, "size": 11.5, "color": INK, "bullet": True, "line": 1.1, "space_after": 3} for a in acts], margin=0)
+                 [{"text": a, "size": 11.5, "color": T["text"], "bullet": True, "line": 1.1, "space_after": 3} for a in acts], margin=0)
         f.advance(h)
 
 
@@ -577,7 +616,7 @@ def place_table(f: Flow, b: dict):
         first_bold_col = 0
         if b.get("title"):
             f.ensure(1.2)
-            f.d.text(f.s, X0, f.y, CW, 0.35, [{"text": b["title"], "size": 14, "bold": True, "color": DEEP}])
+            f.d.text(f.s, X0, f.y, CW, 0.35, [{"text": b["title"], "size": 14, "bold": True, "color": T["strong"]}])
             f.advance(0.3)
     colw = [CW * x for x in fr]
 
@@ -612,8 +651,8 @@ def place_table(f: Flow, b: dict):
         if first_bold_col == 1:
             tbl = f.s.shapes[-1].table
             for ri, r in enumerate(chunk, start=1):
-                f.d._cell(tbl.cell(ri, 1), r[1], 11.5, True, DEEP, "FBF9FE" if ri % 2 == 0 else WHITE)
-                f.d._cell(tbl.cell(ri, 0), r[0], 11, False, MUTED, "FBF9FE" if ri % 2 == 0 else WHITE, align="ctr")
+                f.d._cell(tbl.cell(ri, 1), r[1], 11.5, True, T["strong"], T["row_alt"] if ri % 2 == 0 else T["row"])
+                f.d._cell(tbl.cell(ri, 0), r[0], 11, False, T["muted"], T["row_alt"] if ri % 2 == 0 else T["row"], align="ctr")
         f.advance(h)
         i += k
         if i < len(data):
@@ -652,10 +691,10 @@ def place_gantt(f: Flow, b: dict):
         chunk = rows[i:i + k]
         y = f.y
         # header
-        f.d.rect(f.s, X0, y, CW, 0.4, PURPLE, radius=0.08)
+        f.d.rect(f.s, X0, y, CW, 0.4, T["head_bg"], radius=0.08, line=T["line"] if T["head_bg"] == WHITE else None)
         hx = SW - X0
         for label, w in (("المرحلة / النشاط", lw), ("البداية – النهاية", dw), ("المسؤول", ow)):
-            f.d.text(f.s, hx - w, y, w, 0.4, [{"text": label, "size": 10.5, "color": WHITE}], anchor="middle", margin=0.08)
+            f.d.text(f.s, hx - w, y, w, 0.4, [{"text": label, "size": 10.5, "color": T["head_text"]}], anchor="middle", margin=0.08)
             hx -= w
         step = 7 if total <= 70 else 30.4
         n = int(math.ceil(total / step))
@@ -664,23 +703,23 @@ def place_gantt(f: Flow, b: dict):
             x = track_x + trackw - (at + step / 2) / total * trackw
             label = (months[(start + timedelta(days=int(at))).month - 1] if start else f"ش{t_i + 1}") if step > 7 else f"أ{t_i + 1}"
             if x - 0.3 >= track_x:
-                f.d.text(f.s, x - 0.35, y, 0.7, 0.4, [{"text": label, "size": 9, "color": "EFE6FF", "align": "ctr"}], anchor="middle", margin=0)
+                f.d.text(f.s, x - 0.35, y, 0.7, 0.4, [{"text": label, "size": 9, "color": T["head_text"], "align": "ctr"}], anchor="middle", margin=0)
         y += 0.4
         last_phase = None
         for j, r in enumerate(chunk):
-            bg = "FBF9FE" if j % 2 else WHITE
+            bg = T["row_alt"] if j % 2 else T["row"]
             f.d.rect(f.s, X0, y, CW, rowh, bg, radius=0)
-            f.d.rect(f.s, X0, y + rowh - 0.01, CW, 0.01, LINE, radius=0)
+            f.d.rect(f.s, X0, y + rowh - 0.01, CW, 0.01, T["line"], radius=0)
             label = r.get("activity", "")
             paras = []
             if r.get("phase") != last_phase:
-                paras.append({"text": r.get("phase", ""), "size": 9.5, "bold": True, "color": PURPLE, "space_after": 0, "line": 1.0})
+                paras.append({"text": r.get("phase", ""), "size": 9.5, "bold": True, "color": T["card_title"], "space_after": 0, "line": 1.0})
             last_phase = r.get("phase")
-            paras.append({"text": label, "size": 10.5, "color": INK, "space_after": 0, "line": 1.0})
+            paras.append({"text": label, "size": 10.5, "color": T["text"], "space_after": 0, "line": 1.0})
             f.d.text(f.s, SW - X0 - lw, y, lw, rowh, paras, anchor="middle", margin=0.08)
             off, days = int(r.get("offset") or 0), max(1, int(r.get("days") or 1))
-            f.d.text(f.s, SW - X0 - lw - dw, y, dw, rowh, [{"text": f"{dt(off)} – {dt(off + days - 1)}", "size": 10, "color": MUTED}], anchor="middle", margin=0.08)
-            f.d.text(f.s, SW - X0 - lw - dw - ow, y, ow, rowh, [{"text": r.get("owner", ""), "size": 10, "color": DEEP}], anchor="middle", margin=0.08)
+            f.d.text(f.s, SW - X0 - lw - dw, y, dw, rowh, [{"text": f"{dt(off)} – {dt(off + days - 1)}", "size": 10, "color": T["muted"]}], anchor="middle", margin=0.08)
+            f.d.text(f.s, SW - X0 - lw - dw - ow, y, ow, rowh, [{"text": r.get("owner", ""), "size": 10, "color": T["strong"]}], anchor="middle", margin=0.08)
             bx = track_x + trackw - (off + days) / total * trackw
             bw = max(0.06, days / total * trackw)
             f.d.rect(f.s, max(track_x, bx), y + rowh / 2 - 0.08, min(bw, trackw), 0.16, PURPLE if j % 2 == 0 else ACCENT, radius=0.08)
@@ -689,14 +728,14 @@ def place_gantt(f: Flow, b: dict):
         last = i + k >= len(rows)
         ms = [m for m in (b.get("milestones") or []) if 0 <= int(m.get("offset") or 0) <= total]
         if last and ms:
-            f.d.rect(f.s, X0, y, CW, 0.38, LILAC, radius=0)
-            f.d.text(f.s, SW - X0 - lw, y, lw, 0.38, [{"text": "المحطات الرئيسية", "size": 10.5, "bold": True, "color": PURPLE}], anchor="middle", margin=0.08)
+            f.d.rect(f.s, X0, y, CW, 0.38, T["card"], radius=0)
+            f.d.text(f.s, SW - X0 - lw, y, lw, 0.38, [{"text": "المحطات الرئيسية", "size": 10.5, "bold": True, "color": T["card_title"]}], anchor="middle", margin=0.08)
             for m in ms:
                 cx = track_x + trackw - int(m["offset"]) / total * trackw
                 dm = f.d.rect(f.s, cx - 0.07, y + 0.12, 0.14, 0.14, PURPLE, radius=0, shape=MSO_SHAPE.DIAMOND)
             used += 0.38
             legend = "   ◆ ".join(f"{_plain(m['label'])}" + (f" ({dt(int(m['offset']))})" if start else "") for m in ms)
-            f.d.text(f.s, X0, y + 0.44, CW, 0.5, [{"text": "◆ " + legend, "size": 9.5, "color": MUTED}], margin=0)
+            f.d.text(f.s, X0, y + 0.44, CW, 0.5, [{"text": "◆ " + legend, "size": 9.5, "color": T["muted"]}], margin=0)
             used += 0.5
         f.advance(used)
         i += k
@@ -705,7 +744,21 @@ def place_gantt(f: Flow, b: dict):
 
 
 # ---------------------------------------------------------------------- public
+_theme_lock = __import__("threading").Lock()
+
+
 def build_pptx(proposal: dict, settings: dict) -> bytes:
+    with _theme_lock:
+        T.clear()
+        T.update(THEMES.get((proposal.get("doc") or {}).get("theme") or "ahdaf", THEMES["ahdaf"]))
+        try:
+            return _build(proposal, settings)
+        finally:
+            T.clear()
+            T.update(THEMES["ahdaf"])
+
+
+def _build(proposal: dict, settings: dict) -> bytes:
     doc = proposal.get("doc") or {}
     d = Deck(settings.get("pptx_font") or "Saudi Serif VF")
     sections = [s for s in doc.get("sections", []) if s.get("visible", True)]

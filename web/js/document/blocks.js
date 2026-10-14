@@ -139,7 +139,7 @@ export function renderBlock(block, ctx, cont = false) {
       return renderGantt(block, ctx, cont);
     case 'toc': {
       const items = block.items || [];
-      return `<div class="b-toc" style="--c:${portrait ? 2 : 4}">${items
+      return `<div class="b-toc ${items.length > 12 ? 'dense' : ''}" style="--c:${portrait ? 2 : items.length > 16 ? 5 : 4}">${items
         .map((t) => `<div class="toc"><span class="n">${esc(t.num)}</span><h4>${rich(t.title)}</h4>${t.sub ? `<p>${rich(t.sub)}</p>` : ''}</div>`).join('')}</div>`;
     }
     default:

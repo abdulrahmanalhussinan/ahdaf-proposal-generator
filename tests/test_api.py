@@ -121,8 +121,18 @@ def test_clients_and_templates():
     cid = r.json()["id"]
     assert client.get(f"/api/clients/{cid}").json()["proposals"] == []
     assert client.delete(f"/api/clients/{cid}").status_code == 204
-    templates = client.get("/api/templates").json()["items"]
-    assert any(t["is_builtin"] for t in templates)
+    assert isinstance(client.get("/api/templates").json()["items"], list)
+
+
+def test_upgrade_purges_demo_data():
+    from app.data import repositories as repo
+    from app.data.seed import ensure_seeded
+    repo.clients.create({"name": "عميل تجريبي للترقية"}, is_demo=True)
+    repo.settings.set_many({"data_version": 1})
+    ensure_seeded()
+    assert all(not c["is_demo"] for c in repo.clients.list())
+    assert all(not p["is_demo"] for p in repo.proposals.list())
+    assert repo.settings.get("data_version") == 2
 
 
 def test_spa_routes_serve_index():

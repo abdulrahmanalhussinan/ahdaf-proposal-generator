@@ -171,7 +171,7 @@ def _rewrite(sections: list[dict], inputs: dict, meta: dict, tone: str | None) -
     facts = project_facts(inputs, meta)
     user = _prompt("rewrite").format(
         project_facts=facts,
-        tone=TONES.get(tone_key, tone_key),
+        tone=prefs.get("tone_other") or TONES.get(tone_key, tone_key),
         detail=DETAILS.get(prefs.get("detail") or "medium", "متوسط"),
         segments=json.dumps([{k: v for k, v in s.items()} for s in segs], ensure_ascii=False, indent=1),
     )

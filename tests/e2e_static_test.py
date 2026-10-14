@@ -42,30 +42,25 @@ with sync_playwright() as pw:
     check("boot screen shows while loading", page.locator(".boot").count() == 1)
     boot(page)
     check("browser edition boots", True, f"{time.time() - t0:.1f}s first load")
-    page.wait_for_selector(".table tbody tr")
+    page.wait_for_selector(".hero")
     rows = page.locator(".table tbody tr").count()
-    check("demo proposals seeded", rows == 4, f"{rows} rows")
+    check("no demo proposals in the product", rows == 0, f"{rows} rows")
     page.screenshot(path=str(OUT / "01-dashboard.png"))
 
     page.get_by_role("link", name="إنشاء عرض جديد").first.click()
-    page.wait_for_selector("#c-name")
+    page.wait_for_selector(".design-opt .pg")
     check("hash routing", "#/new" in page.url, page.url)
+    page.locator(".design-opt", has_text="العصري الجريء").click()
+    page.get_by_role("button", name="التالي").click()
     page.locator("#c-name").fill(CLIENT)
     page.locator("#c-sector").select_option("retail")
-    page.get_by_role("button", name="التالي").click()
     page.locator("#p-name").fill("حملة الجمعة البيضاء")
     page.get_by_role("radio", name="حملة تسويقية متكاملة").click()
-    page.get_by_placeholder("مثال: إدارة حساب الشركة على تيك توك").fill("حملة رقمية متكاملة لموسم الجمعة البيضاء على سناب شات وتيك توك.")
-    for _ in range(4):
-        page.get_by_role("button", name="التالي").click()
-    page.get_by_placeholder("رفع الوعي بالعلامة في الرياض").fill("زيادة المبيعات خلال الموسم 25%")
-    page.get_by_role("button", name="التالي").click()
-    page.wait_for_selector(".analysis div")
-    page.get_by_role("button", name="توليد العرض الفني").click()
+    page.get_by_role("button", name="ولّد الآن بالاقتراحات التلقائية").click()
     page.wait_for_url("**/edit", timeout=60_000)
     page.wait_for_selector(".ed-nav .sec-item")
     pid = page.url.split("#/proposals/")[1].split("/")[0]
-    check("proposal generated in the browser", bool(pid), pid)
+    check("proposal generated in the browser from essentials only", bool(pid), pid)
     page.screenshot(path=str(OUT / "02-editor.png"))
 
     page.locator(".ed-nav .sec-item", has_text="فهمنا للمشروع").click()
@@ -91,13 +86,6 @@ with sync_playwright() as pw:
     page.emulate_media(media="screen")
     page.evaluate("window.dispatchEvent(new Event('afterprint'))")
     check("printed PDF has the proposal pages", pdf[:4] == b"%PDF", f"{len(pdf) // 1024} KB")
-
-    # PowerPoint generated in the browser (installs python-pptx on first use)
-    with page.expect_download(timeout=240_000) as dl:
-        page.get_by_role("button", name="PowerPoint").click()
-    target = OUT / "browser.pptx"
-    dl.value.save_as(str(target))
-    check("PowerPoint export in the browser", target.read_bytes()[:2] == b"PK", f"{target.stat().st_size // 1024} KB")
 
     # persistence across reloads (IndexedDB)
     page.wait_for_timeout(1200)

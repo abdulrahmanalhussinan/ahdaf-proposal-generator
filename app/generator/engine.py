@@ -18,17 +18,20 @@ from datetime import date, timedelta
 from app.core import arabic as ar
 from app.generator import phrases as P
 from app.generator.analyzer import DETAILS, TONES, Analysis, analyze
+from app.generator.knowledge import ideas as I
 from app.generator.knowledge.objectives import OBJECTIVES
 from app.generator.knowledge.platforms import PLATFORMS
 from app.generator.knowledge.project_types import PROJECT_TYPES
 from app.generator.knowledge.services import CATEGORIES
 
-SECTION_ORDER = ["about", "intro", "understanding", "objectives", "scope", "methodology", "deliverables",
+SECTION_ORDER = ["about", "intro", "understanding", "objectives", "idea", "activations", "content_plan",
+                 "scope", "methodology", "deliverables",
                  "timeline", "team", "kpis", "governance", "assumptions", "risks", "budget", "past_projects",
                  "conclusion"]
 
 SECTION_TITLES = {
     "about": "عن أهداف", "intro": "المقدمة", "understanding": "فهمنا للمشروع", "objectives": "أهداف المشروع",
+    "idea": "الفكرة الإبداعية", "activations": "أفكار تفعيلية مقترحة", "content_plan": "محاور المحتوى وخطة النشر",
     "scope": "نطاق العمل", "methodology": "منهجية وآلية التنفيذ", "deliverables": "المخرجات",
     "timeline": "الجدول الزمني", "team": "فريق العمل", "kpis": "مؤشرات الأداء", "governance": "الحوكمة وإدارة المشروع",
     "assumptions": "الافتراضات والمتطلبات", "risks": "المخاطر وآلية التعامل معها", "budget": "الإطار المالي",
@@ -36,11 +39,14 @@ SECTION_TITLES = {
 }
 SECTION_TITLES_EN = {
     "about": "About AHDAF", "intro": "Introduction", "understanding": "Our Understanding", "objectives": "Objectives",
+    "idea": "Creative Idea", "activations": "Activation Ideas", "content_plan": "Content Plan",
     "scope": "Scope of Work", "methodology": "Methodology", "deliverables": "Deliverables", "timeline": "Timeline",
     "team": "Project Team", "kpis": "KPIs", "governance": "Governance", "assumptions": "Assumptions",
     "risks": "Risk Management", "budget": "Budget", "past_projects": "Related Work", "conclusion": "Conclusion",
 }
-DIVIDER_SECTIONS = {"understanding", "scope", "timeline", "governance"}
+DIVIDER_SECTIONS = {"understanding", "idea", "scope", "timeline", "governance"}
+CONTENT_TYPES = {"social_media", "content", "campaign", "influencer", "digital_ads"}
+DESIGNS = ("ahdaf", "night", "bold", "minimal")
 
 DETAIL_CAPS = {
     "brief": {"activities": 2, "kpis": 4, "risks": 4, "assumptions": 5, "objectives": 3, "cards": 4, "team": 5,
@@ -321,8 +327,11 @@ def _kpi_name(w: Writer, key: str) -> str | None:
 
 def _section(sec_id: str, w: Writer, rng: random.Random, blocks: list[dict], regen: int, tone: str | None) -> dict:
     sub = w.choose(rng, P.SUBTITLES.get(sec_id, {"default": [""]}), tone)
+    title = SECTION_TITLES[sec_id]
+    if sec_id == "idea":
+        title = I.IDEA_TITLES.get(w.a.type_key, title)
     return {
-        "id": sec_id, "type": sec_id, "title": SECTION_TITLES[sec_id], "title_en": SECTION_TITLES_EN[sec_id],
+        "id": sec_id, "type": sec_id, "title": title, "title_en": SECTION_TITLES_EN[sec_id],
         "subtitle": sub, "visible": True, "divider": sec_id in DIVIDER_SECTIONS, "regen": regen,
         "tone": tone or w.a.tone, "blocks": blocks,
     }
@@ -388,8 +397,8 @@ def build_understanding(w: Writer, rng, tone):
         cards.append({"title": "التحدي", "text": w.note(w.fill(challenges[0])), "icon": "alert"})
     if opportunities:
         cards.append({"title": "الفرصة", "text": w.note(w.fill(opportunities[0])), "icon": "spark"})
-    cards.append({"title": "الجمهور المستهدف",
-                  "text": ar.sentence(a.audience) if a.audience else "[[حدد الجمهور المستهدف: الفئة، المدينة، الاهتمامات]]",
+    cards.append({"title": "الجمهور المستهدف المقترح" if a.audience_suggested else "الجمهور المستهدف",
+                  "text": ar.sentence(ar.join(a.segments)) if a.audience_suggested else ar.sentence(a.audience),
                   "icon": "users"})
     if a.event_date or a.location:
         parts = []
@@ -588,7 +597,7 @@ def build_timeline(w: Writer, rng, tone):
     if a.type_key == "event":
         day = next((p for p in phases if p.get("key") == "day"), None)
         if day:
-            milestones.append({"id": _id(), "label": "يوم الفعالية" if a.event_date else "يوم الفعالية [[يُحدد التاريخ]]", "offset": day["offset"]})
+            milestones.append({"id": _id(), "label": "يوم الفعالية" if a.event_date else "يوم الفعالية (موعد مقترح)", "offset": day["offset"]})
     if a.is_recurring:
         m = 1
         while m * 30 < a.days - 5:
@@ -822,12 +831,82 @@ def build_conclusion(w: Writer, rng, tone):
     return blocks
 
 
+# ------------------------------------------------------------------ creative sections (the system proposes)
+def _concept(w: Writer, rng) -> dict:
+    options = list(I.CONCEPTS.get(w.a.sector_key) or []) + list(I.CONCEPTS["general"])
+    if not w.regen:
+        return options[0]
+    return options[(w.regen + rng.randrange(len(options))) % len(options)]
+
+
+def build_idea(w: Writer, rng, tone):
+    a = w.a
+    c = _concept(w, rng)
+    name = c["name"]
+    w.ctx["concept"] = name
+    execution = [w.fill(x, concept=name) for x in I.EXECUTION.get(a.type_key, I.EXECUTION["other"])]
+    lines = list(c["lines"])
+    blocks = [
+        blk("lead", text=w.note(f"«{name}»: " + w.fill(c["idea"]))),
+        blk("callout", label="الرسالة الأساسية", text=w.note(w.fill(c["message"]))),
+        blk("cards", title="مقترحات للشعار", columns=3,
+            items=[{"title": f"«{line}»", "text": "", "icon": "quote"} for line in lines]),
+        blk("list", title="كيف تتحول الفكرة إلى تنفيذ", items=[ar.sentence(x) for x in execution], style="check"),
+    ]
+    return blocks
+
+
+def build_activations(w: Writer, rng, tone):
+    a = w.a
+    concept = w.ctx.get("concept") or _concept(w, rng)["name"]
+    pool = [dict(x) for x in I.SECTOR_ACTIVATIONS.get(a.sector_key, I.SECTOR_ACTIVATIONS["general"])]
+    pool += [dict(x) for x in I.TYPE_ACTIVATIONS.get(a.type_key, I.TYPE_ACTIVATIONS["other"])]
+    pool = w.shuffled(rng, pool)
+    count = {"brief": 4, "medium": 6, "advanced": 8}[a.detail]
+    items = []
+    for x in pool[:count]:
+        items.append({"title": w.fill(x["title"], concept=concept), "text": w.fill(x["text"], concept=concept),
+                      "icon": x.get("icon", "spark")})
+    intro = w.fill("أفكار عملية نقترحها {li_client} لتحويل الفكرة إلى تفاعل ونتائج. كل فكرة قابلة للتطوير أو الاستبدال بعد مناقشتها مع فريقكم.")
+    return [blk("paragraph", text=w.note(intro)), blk("cards", items=items, columns=2 if count <= 4 else 3)]
+
+
+def build_content_plan(w: Writer, rng, tone):
+    a = w.a
+    pillars = [dict(x) for x in I.PILLARS.get(a.sector_key, I.GENERIC_PILLARS)]
+    pillars = w.shuffled(rng, pillars) if w.regen else pillars
+    cards = []
+    for pl in pillars:
+        ex = "، ".join(w.fill(e) for e in pl["examples"])
+        cards.append({"title": pl["title"], "text": f"{w.fill(pl['text'])} أمثلة: {ex}.", "icon": "pen"})
+    labels = a.platform_labels or ["المنصات المعتمدة"]
+    formats = []
+    for key in a.platforms or []:
+        formats += [(PLATFORMS[key]["label"], f) for f in PLATFORMS[key]["formats"] if "بث مباشر" not in f]
+    if not formats:
+        formats = [(labels[0], "مقطع قصير"), (labels[0], "منشور"), (labels[0], "قصص")]
+    examples = [w.fill(e) for pl in pillars for e in pl["examples"]]
+    rows = []
+    for i, day in enumerate(I.WEEK_DAYS):
+        platform, fmt = formats[i % len(formats)]
+        rows.append({"id": _id(), "day": day, "platform": platform, "format": fmt,
+                     "idea": examples[i % len(examples)], "pillar": pillars[i % len(pillars)]["title"]})
+    return [
+        blk("paragraph", text=w.note(w.fill("نقترح أن يُبنى المحتوى على المحاور التالية، لكل محور هدف وأمثلة جاهزة للتطوير. يليها نموذج لأسبوع نشر يوضح الإيقاع المقترح."))),
+        blk("cards", items=cards, columns=2),
+        blk("table", title="نموذج أسبوع نشر", columns=[
+            {"key": "day", "label": "اليوم"}, {"key": "platform", "label": "المنصة"}, {"key": "format", "label": "الصيغة"},
+            {"key": "pillar", "label": "المحور"}, {"key": "idea", "label": "الفكرة"}], rows=rows),
+    ]
+
+
 BUILDERS = {
     "about": build_about, "intro": build_intro, "understanding": build_understanding,
     "objectives": build_objectives, "scope": build_scope, "methodology": build_methodology,
     "deliverables": build_deliverables, "timeline": build_timeline, "team": build_team, "kpis": build_kpis,
     "governance": build_governance, "assumptions": build_assumptions, "risks": build_risks,
     "budget": build_budget, "past_projects": build_past_projects, "conclusion": build_conclusion,
+    "idea": build_idea, "activations": build_activations, "content_plan": build_content_plan,
 }
 
 
@@ -839,6 +918,8 @@ def _enabled_sections(a: Analysis) -> list[str]:
         if sec == "budget" and not (a.budget and a.show_budget):
             continue
         if sec == "past_projects" and not a.prefs.get("include_past_projects"):
+            continue
+        if sec == "content_plan" and a.type_key not in CONTENT_TYPES:
             continue
         out.append(sec)
     return out
@@ -876,6 +957,7 @@ def generate(inputs: dict, library: dict, settings: dict, seed: int | None = Non
         "cover": build_cover(a, settings, w, today),
         "sections": sections,
         "layout": a.prefs.get("layout") if a.prefs.get("layout") in ("landscape", "portrait") else "landscape",
+        "theme": a.prefs.get("design") if a.prefs.get("design") in DESIGNS else "ahdaf",
         "seed": seed,
         "tone": a.tone,
         "detail": a.detail,
@@ -903,6 +985,11 @@ def regenerate_section(inputs: dict, doc: dict, section_id: str, library: dict, 
                 used.add(b["text"])
     w = Writer(a, library, settings, doc.get("seed", 1), used=used)
     w.regen = regen
+    idea = next((s for s in doc.get("sections", []) if s.get("type") == "idea"), None)
+    if idea and base_type != "idea":
+        lead = next((b.get("text", "") for b in idea.get("blocks", []) if b.get("type") == "lead"), "")
+        if lead.startswith("«") and "»" in lead:
+            w.ctx["concept"] = lead[1:lead.index("»")]
     rng = w.rng(base_type, regen)
     blocks = BUILDERS[base_type](w, rng, tone)
     section = _section(base_type, w, rng, blocks, regen, tone)
@@ -919,6 +1006,7 @@ def regenerate_section(inputs: dict, doc: dict, section_id: str, library: dict, 
 def build_meta(a: Analysis) -> dict:
     return {
         "missing": a.missing,
+        "suggested": a.suggested,
         "type": a.type_key,
         "type_label": a.ptype["label"],
         "sector": a.sector_key,

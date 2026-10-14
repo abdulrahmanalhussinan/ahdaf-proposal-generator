@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
 from app.core import arabic as ar
+from app.generator.knowledge.ideas import SEGMENTS
 from app.generator.knowledge.objectives import DEFAULTS_BY_TYPE, OBJECTIVES
 from app.generator.knowledge.platforms import PLATFORM_ORDER, PLATFORMS
 from app.generator.knowledge.project_types import PROJECT_TYPES
@@ -81,6 +82,10 @@ class Analysis:
     prefs: dict
     missing: list[dict] = field(default_factory=list)
     event_noun: str = "فعالية"
+    audience_suggested: bool = False
+    segments: list[str] = field(default_factory=list)
+    extra_platforms: list[str] = field(default_factory=list)
+    suggested: list[str] = field(default_factory=list)  # what the system proposed on its own
 
     # ------------------------------------------------------------------ derived helpers
     @property
@@ -93,7 +98,7 @@ class Analysis:
 
     @property
     def platform_labels(self) -> list[str]:
-        return [PLATFORMS[p]["label"] for p in self.platforms]
+        return [PLATFORMS[p]["label"] for p in self.platforms] + list(self.extra_platforms)
 
     @property
     def audience_phrase(self) -> str:
@@ -270,11 +275,14 @@ def analyze(inputs: dict, library: dict[str, list[dict]]) -> Analysis:
     scope_text = (scope_in.get("description") or "").strip()
     all_text = " ".join([project, description, scope_text, project_in.get("challenge") or ""])
 
-    # project type
+    # project type ("other" can carry the user's own wording)
     type_key = project_in.get("type") or ""
     if type_key not in PROJECT_TYPES:
         type_key = detect_type(all_text) or "other"
-    ptype = PROJECT_TYPES[type_key]
+    ptype = dict(PROJECT_TYPES[type_key])
+    type_other = (project_in.get("type_other") or "").strip()
+    if type_key == "other" and type_other:
+        ptype.update(label=type_other, nature=f"{type_other} {{li_client}}", nature_short=type_other)
     secondary = []
     for key, t in PROJECT_TYPES.items():
         if key == type_key or key == "other":
@@ -282,11 +290,15 @@ def analyze(inputs: dict, library: dict[str, list[dict]]) -> Analysis:
         if sum(1 for kw in t["keywords"] if ar.normalize(kw) in ar.normalize(all_text)) >= 2:
             secondary.append(key)
 
-    # sector
+    # sector (library profile, completed with built-in knowledge for older libraries)
     sector_key, sector = find_sector(client_in.get("sector") or "", library.get("sectors", []),
                                      client, client_in.get("about") or "", all_text)
+    builtin = next((x for x in SECTORS if x["key"] == sector_key), None)
+    if builtin:
+        sector = {**builtin, **{k: v for k, v in sector.items() if v}}
 
     platforms = detect_platforms(all_text, scope_text, selected=project_in.get("platforms") or [])
+    extra_platforms = ar.split_lines(project_in.get("platforms_other") or "")
 
     # dates
     start = _parse_date(timeline_in.get("start_date"))
@@ -298,27 +310,41 @@ def analyze(inputs: dict, library: dict[str, list[dict]]) -> Analysis:
         end = start + timedelta(days=days - 1)
     elif end and days:
         start = end - timedelta(days=days - 1)
-    duration_missing = not days
+    duration_suggested = not days
     if not days:
         days = ptype["default_days"]
+        if start:
+            end = start + timedelta(days=days - 1)
     event_date = _parse_date(project_in.get("event_date"))
 
-    # services (library first, then built-in defaults)
+    # services: chosen ones + "other" text; none chosen -> the system proposes the usual set for the type
     lib_services = {s["key"]: s for s in library.get("services", [])}
     selected = [k for k in (services_in.get("selected") or []) if k in lib_services]
-    services_missing = not selected and not services_in.get("custom")
-    if services_missing:
+    custom_services = [c for c in (services_in.get("custom") or []) if (c.get("title") or "").strip()]
+    custom_services += [{"title": line, "description": ""} for line in ar.split_lines(services_in.get("other") or "")]
+    services_suggested = not selected
+    if services_suggested:
         selected = [k for k in ptype["default_services"] if k in lib_services]
     services = [lib_services[k] for k in selected]
-    custom_services = [c for c in (services_in.get("custom") or []) if (c.get("title") or "").strip()]
 
-    # objectives
-    raw_objectives = ar.split_lines(goals_in.get("objectives") or "")
+    # audience: the user's chips/text, otherwise segments proposed from the sector
+    aud_in = project_in.get("audience")
+    aud_list = [x for x in (aud_in if isinstance(aud_in, list) else ar.split_lines(aud_in or "")) if x]
+    aud_list += ar.split_lines(project_in.get("audience_other") or "")
+    segments = list(SEGMENTS.get(sector_key) or SEGMENTS["general"])
+    audience_suggested = not aud_list
+    audience = ar.join(aud_list) if aud_list else ar.join(segments[:3])
+
+    # objectives: chosen categories + "other" text lines; none -> proposed for the project type
     tokens_ctx = {"client": client or "العميل", "bi_client": ar.bi(client) if client else "بالعلامة",
-                  "project": project or "المشروع",
-                  "audience": "الجمهور المستهدف"}
+                  "project": project or "المشروع", "audience": "الجمهور المستهدف"}
     objectives: list[Objective] = []
-    for line in raw_objectives:
+    for key in goals_in.get("objective_keys") or []:
+        if key in OBJECTIVES:
+            obj = OBJECTIVES[key]
+            objectives.append(Objective(key=key, title=obj["label"], statement=_fill(obj["statement"], tokens_ctx),
+                                        measures=obj["measures"], target=None, source="user"))
+    for line in ar.split_lines(goals_in.get("objectives") or ""):
         key = classify_objective(line)
         obj = OBJECTIVES[key]
         objectives.append(Objective(key=key, title=line, statement=_fill(obj["statement"], tokens_ctx),
@@ -353,7 +379,7 @@ def analyze(inputs: dict, library: dict[str, list[dict]]) -> Analysis:
     a = Analysis(
         inputs=inputs, client=client, client_gender=_gender(client), client_about=(client_in.get("about") or "").strip(),
         project=project, type_key=type_key, ptype=ptype, secondary_types=secondary, sector_key=sector_key, sector=sector,
-        platforms=platforms, audience=(project_in.get("audience") or "").strip() or None, description=description,
+        platforms=platforms, audience=audience, description=description,
         challenge=(project_in.get("challenge") or "").strip(), location=(project_in.get("location") or "").strip(),
         scope_text=scope_text, out_of_scope=ar.split_lines(scope_in.get("out_of_scope") or ""),
         special_requirements=ar.split_lines(prefs.get("requirements") or ""),
@@ -362,31 +388,24 @@ def analyze(inputs: dict, library: dict[str, list[dict]]) -> Analysis:
         kpi_targets=kpi_targets, team_size=team_size, budget=(goals_in.get("budget") or "").strip(),
         show_budget=bool(goals_in.get("show_budget")), tone=prefs.get("tone") if prefs.get("tone") in TONES else "corporate",
         detail=prefs.get("detail") if prefs.get("detail") in DETAILS else "medium", prefs=prefs, event_noun=event_noun,
+        audience_suggested=audience_suggested, segments=segments, extra_platforms=extra_platforms,
     )
 
-    # ---- record what is missing (never invent it)
+    # ---- only the essentials are required; everything else the system proposes and lists for review
     if not client:
         a.missing_add("client.name", "اسم العميل", "اسم العميل مطلوب ليظهر في الغلاف والنصوص.", 1)
-    if not client_in.get("sector"):
-        a.missing_add("client.sector", "قطاع العميل", "حُدد القطاع تلقائيًا من الوصف؛ اختره يدويًا لنتائج أدق.", 1)
     if not project:
-        a.missing_add("project.name", "اسم المشروع", "اسم المشروع مطلوب للغلاف والعناوين.", 2)
-    if not description:
-        a.missing_add("project.description", "وصف المشروع", "بدون وصف يعتمد فهم المشروع على نوعه وقطاعه فقط.", 2)
-    if not a.audience:
-        a.missing_add("project.audience", "الجمهور المستهدف", "تُرك مكان الجمهور قابلًا للتعبئة في قسم فهم المشروع.", 2)
-    if services_missing:
-        a.missing_add("services", "الخدمات المطلوبة", "اقتُرحت الخدمات المعتادة لهذا النوع من المشاريع؛ راجعها.", 4)
-    if duration_missing:
-        a.missing_add("timeline.duration", "مدة المشروع", f"استُخدمت مدة افتراضية ({ar.duration_phrase(days)}) لبناء الجدول؛ عدّلها.", 5)
-    if not start:
-        a.missing_add("timeline.start_date", "تاريخ البداية", "الجدول الزمني معروض بالأسابيع حتى تحديد تاريخ البداية.", 5)
-    if type_key == "event" and not event_date:
-        a.missing_add("project.event_date", "تاريخ الفعالية", "تاريخ الفعالية غير محدد؛ وُضع في نهاية مرحلة التجهيز.", 2)
+        a.missing_add("project.name", "اسم المشروع", "اسم المشروع مطلوب للغلاف والعناوين.", 1)
+    if audience_suggested:
+        a.suggested.append("الجمهور المستهدف")
     if objectives_suggested:
-        a.missing_add("goals.objectives", "أهداف المشروع", "الأهداف المعروضة مقترحة بناءً على نوع المشروع؛ أكّدها أو عدّلها.", 6)
-    if type_key in ("social_media", "content") and not platforms:
-        a.missing_add("project.platforms", "المنصات المستهدفة", "لم تُحدد المنصات؛ النصوص تشير إلى «المنصات المعتمدة».", 2)
+        a.suggested.append("أهداف المشروع")
+    if services_suggested:
+        a.suggested.append("الخدمات")
+    if duration_suggested:
+        a.suggested.append(f"المدة ({ar.duration_phrase(days)})")
+    if not client_in.get("sector"):
+        a.suggested.append(f"القطاع ({sector.get('name', '')})")
     return a
 
 

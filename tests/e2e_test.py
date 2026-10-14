@@ -15,7 +15,7 @@ from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
 
-BASE = "http://127.0.0.1:8765"
+BASE = sys.argv[2] if len(sys.argv) > 2 else "http://127.0.0.1:8765"
 OUT = Path(sys.argv[1] if len(sys.argv) > 1 else "e2e-output")
 OUT.mkdir(parents=True, exist_ok=True)
 CLIENT = f"مطاعم اختبار الذوق {int(time.time()) % 10000}"
@@ -44,41 +44,37 @@ def run() -> None:
         page = ctx.new_page()
         watch(page)
 
-        # ------------------------------------------------------------ wizard
+        # ------------------------------------------------------------ wizard (3 steps)
         page.goto(f"{BASE}/new", wait_until="networkidle")
-        page.get_by_role("button", name="بدء من الصفر").click() if page.get_by_text("استُكملت المسودة").count() else None
+        if page.get_by_text("استُكملت المسودة").count():
+            page.get_by_role("button", name="البدء من جديد").click()
+            page.get_by_role("button", name="مسح المدخلات").click()
+        page.wait_for_selector(".design-opt .pg")
+        check("step 1 shows the four designs", page.locator(".design-opt").count() == 4)
+        page.locator(".design-opt", has_text="الليلي الفاخر").click()
+        shot(page, "01-wizard-designs")
+        page.get_by_role("button", name="التالي").click()
+        page.get_by_role("button", name="التالي").click()
+        check("wizard validates the essentials", page.get_by_text("اكتب اسم العميل").count() > 0)
         page.locator("#c-name").fill(CLIENT)
         page.locator("#c-sector").select_option("food_beverage")
-        page.get_by_placeholder("مثال: مطور عقاري يطلق").fill("سلسلة مطاعم سعودية بثلاثة فروع في الرياض، متخصصة في المطبخ النجدي.")
-        page.get_by_role("button", name="التالي").click()
-        # step 2 – validation: name is required
-        page.get_by_role("button", name="التالي").click()
-        check("wizard validates required project name", page.get_by_text("اكتب اسم المشروع").count() > 0)
         page.locator("#p-name").fill("إدارة حسابات التواصل الاجتماعي")
         page.get_by_role("radio", name="إدارة منصات التواصل الاجتماعي").click()
-        page.get_by_placeholder("مثال: إدارة حساب الشركة على تيك توك").fill("إدارة حسابات المطاعم على إنستقرام وسناب شات وتيك توك، وإبراز الأطباق والفروع والعروض الموسمية.")
-        page.get_by_placeholder("مثال: العائلات والمسافرون بين المدن").fill("العائلات والشباب في الرياض")
+        page.get_by_placeholder("مثال: نبي نرفع حضور الشركة").fill("نبي نرفع حضور المطاعم ونزيد الطلبات.")
+        shot(page, "02-wizard-project")
+        page.get_by_role("button", name="التالي").click()
+        page.locator(".chips").nth(0).locator(".chip").first.click()  # first suggested audience segment
+        page.get_by_role("button", name="تعزيز التفاعل").click()
+        page.locator(".chips").nth(1).get_by_role("button", name="أخرى").click()
+        page.get_by_placeholder("هدف آخر").fill("رفع التفاعل على المحتوى إلى 6%")
         page.get_by_role("button", name="إنستقرام").click()
         page.get_by_role("button", name="سناب شات").click()
-        shot(page, "01-wizard-step2")
-        page.get_by_role("button", name="التالي").click()
-        page.get_by_placeholder("مثال: إدارة الحساب يوميًا").fill("النشر اليومي، وتصوير الأطباق، والرد على التعليقات، والتقارير الشهرية.")
-        page.get_by_role("button", name="التالي").click()
-        page.get_by_role("button", name="اقتراح خدمات").click()
-        checked = page.locator(".svc-groups input[type=checkbox]:checked").count()
-        check("service suggestion selects services", checked >= 4, f"{checked} selected")
-        page.get_by_role("button", name="التالي").click()
-        page.get_by_placeholder("6", exact=True).fill("4")
+        page.locator(".chips").nth(3).get_by_role("button", name="أخرى").click()
+        page.get_by_placeholder("خدمة أخرى").fill("تصوير الأطباق داخل المطعم")
+        page.get_by_role("button", name="شهران").click()
         page.locator("input[type=date]").first.fill("2026-11-15")
-        page.get_by_placeholder("مثال: 5").fill("4")
-        page.get_by_role("button", name="التالي").click()
-        page.get_by_placeholder("رفع الوعي بالعلامة في الرياض").fill("زيادة الطلبات من التطبيقات\nرفع التفاعل على المحتوى إلى 6%")
-        page.get_by_placeholder("12 فيديو شهريًا").fill("10 فيديو شهريًا")
-        page.get_by_role("button", name="التالي").click()
         page.get_by_role("button", name="فاخر").click()
-        page.wait_for_selector(".analysis div")
-        shot(page, "02-wizard-step7")
-        check("analysis shows detected sector", page.locator(".analysis").inner_text().find("الأغذية") >= 0)
+        shot(page, "03-wizard-suggestions")
         page.get_by_role("button", name="توليد العرض الفني").click()
         page.wait_for_url("**/edit", timeout=30_000)
         page.wait_for_selector(".ed-nav .sec-item")
@@ -88,11 +84,12 @@ def run() -> None:
 
         # ------------------------------------------------------------ editor
         sections = page.locator(".ed-nav .sec-item .t").all_inner_texts()
-        expected = ["المقدمة", "فهمنا للمشروع", "أهداف المشروع", "نطاق العمل", "منهجية وآلية التنفيذ", "المخرجات",
+        expected = ["المقدمة", "فهمنا للمشروع", "أهداف المشروع", "الفكرة الإبداعية", "أفكار تفعيلية مقترحة",
+                    "محاور المحتوى وخطة النشر", "نطاق العمل", "منهجية وآلية التنفيذ", "المخرجات",
                     "الجدول الزمني", "فريق العمل", "مؤشرات الأداء", "الحوكمة وإدارة المشروع", "الافتراضات والمتطلبات",
                     "المخاطر وآلية التعامل معها", "الخاتمة"]
         missing = [s for s in expected if s not in sections]
-        check("all 13 required sections exist", not missing, f"missing: {missing}" if missing else f"{len(sections)} sections")
+        check("all required + creative sections exist", not missing, f"missing: {missing}" if missing else f"{len(sections)} sections")
 
         page.locator(".ed-nav .sec-item", has_text="فهمنا للمشروع").click()
         title = page.locator(".title-in")
@@ -127,7 +124,10 @@ def run() -> None:
         dl = next(b for b in secs["deliverables"]["blocks"] if b["type"] == "deliverables")
         check("edited quantity persisted", dl["rows"][0]["qty"] == 15, str(dl["rows"][0]["qty"]))
         check("hidden section persisted", secs["risks"]["visible"] is False)
-        check("user deliverable merged with library row", any("10 شهريًا" in (r.get("description") or "") for r in dl["rows"]))
+        check("chosen design saved", saved["doc"]["theme"] == "night")
+        check("«أخرى» service used", "تصوير الأطباق داخل المطعم" in saved["meta"]["service_labels"])
+        check("objective target from «أخرى» text", any(k["target"] == "6%" for s2 in saved["doc"]["sections"] for b in s2["blocks"] if b["type"] == "kpis" for k in b["items"]))
+        check("no unfilled placeholders", "[[" not in json.dumps(saved["doc"], ensure_ascii=False))
         page.locator(".ed-nav .sec-item", has_text="المخاطر").locator(".eye").click()
         page.wait_for_timeout(1500)
 
@@ -140,7 +140,7 @@ def run() -> None:
         page.get_by_placeholder("ابحث: اسم العميل").fill("الأغذية 2026")
         page.wait_for_timeout(900)
         check("search by sector + year", page.locator(".table tbody tr").count() >= 1)
-        page.get_by_placeholder("ابحث: اسم العميل").fill("المؤثرين")
+        page.get_by_placeholder("ابحث: اسم العميل").fill("تصوير الأطباق")
         page.wait_for_timeout(900)
         check("search by service name", page.locator(".table tbody tr").count() >= 1)
         shot(page, "06-search")
@@ -160,6 +160,9 @@ def run() -> None:
         page.wait_for_selector(".viewer .pg")
         n = page.locator(".viewer .pg").count()
         check("viewer renders paginated pages", n >= 15, f"{n} pages")
+        page.goto(f"{BASE}/templates", wait_until="networkidle")
+        page.wait_for_selector(".design-opt .pg")
+        check("templates page shows 4 designs", page.locator(".design-opt").count() == 4)
         shot(page, "07-viewer")
 
         # ------------------------------------------------------------ mobile

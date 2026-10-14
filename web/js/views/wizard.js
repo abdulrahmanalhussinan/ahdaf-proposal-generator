@@ -1,36 +1,33 @@
-import { html, useEffect, useMemo, useState } from '../vendor/preact-htm.js';
+// New proposal: three short steps. The user gives the essentials; the system proposes the rest
+// (idea, audience, objectives, services, timeline...) and everything stays editable afterwards.
+import { html, useEffect, useState } from '../vendor/preact-htm.js';
 import { api } from '../lib/api.js';
 import { navigate, toast, toastError, useStore, confirmDialog } from '../lib/store.js';
-import { parseISO, addDays, toISO, fmtDate } from '../lib/format.js';
-import { Btn, Icon, Field, Input, TextArea, Select, Switch, Chips, Seg, ImagePicker, setTitle, Spinner } from '../components/ui.js';
+import { Btn, Icon, Field, Input, TextArea, Select, Seg, ImagePicker, setTitle, Spinner } from '../components/ui.js';
+import { DesignPicker, DESIGN_KEYS } from '../components/designs.js';
 import { REUSE_KEY } from './actions.js';
 
-const DRAFT_KEY = 'ahdaf.wizard.draft';
+const DRAFT_KEY = 'ahdaf.wizard.draft.v2';
 const STEPS = [
-  { key: 'client', title: 'معلومات العميل', desc: 'لمن نكتب هذا العرض؟' },
-  { key: 'project', title: 'معلومات المشروع', desc: 'ما المشروع، ولمن يتوجه؟' },
-  { key: 'scope', title: 'نطاق العمل', desc: 'حدود العمل وما يشمله وما لا يشمله.' },
-  { key: 'services', title: 'الخدمات', desc: 'الخدمات التي ستقدمها أهداف في هذا المشروع.' },
-  { key: 'timeline', title: 'المدة والجدول الزمني', desc: 'متى يبدأ المشروع وكم يستمر.' },
-  { key: 'goals', title: 'الأهداف والمخرجات', desc: 'ما الذي يجب أن يتحقق، وما الذي سيُسلَّم.' },
-  { key: 'prefs', title: 'التفضيلات', desc: 'أسلوب الكتابة ومستوى التفصيل وشكل العرض.' },
+  { title: 'التصميم', desc: 'اختر شكل العرض الفني. تقدر تغيّره لاحقًا من المحرر.' },
+  { title: 'المشروع', desc: 'المعلومات الأساسية فقط، والنظام يكمل الباقي.' },
+  { title: 'اقتراحاتك', desc: 'كلها اختيارية: ما تتركه يقترحه النظام بنفسه.' },
 ];
-const TONE_HINT = {
-  formal: 'لغة رسمية تناسب الجهات الحكومية', corporate: 'مباشر وواضح لعروض الشركات', luxury: 'راقٍ ومنتقى للعلامات الفاخرة',
-  marketing: 'حيوي ومقنع بإيقاع تسويقي', concise: 'أقصر ما يمكن دون إخلال', detailed: 'شرح أوفى لكل قسم',
-};
 const PLATFORM_TYPES = ['social_media', 'content', 'influencer', 'digital_ads', 'campaign'];
 const EVENT_TYPES = ['event', 'exhibition'];
+const DURATIONS = [
+  { value: '2w', label: 'أسبوعان', v: 2, u: 'week' }, { value: '1m', label: 'شهر', v: 1, u: 'month' },
+  { value: '2m', label: 'شهران', v: 2, u: 'month' }, { value: '3m', label: '3 أشهر', v: 3, u: 'month' },
+  { value: '6m', label: '6 أشهر', v: 6, u: 'month' }, { value: '12m', label: 'سنة', v: 12, u: 'month' },
+];
 
 const empty = () => ({
-  client: { name: '', sector: '', about: '', contact_name: '', website: '', logo: null },
-  project: { name: '', type: '', description: '', challenge: '', audience: '', location: '', event_date: '', platforms: [] },
-  scope: { description: '', out_of_scope: '' },
-  services: { selected: [], custom: [] },
-  timeline: { duration_value: '', duration_unit: 'month', start_date: '', end_date: '', team_size: '' },
-  goals: { objectives: '', deliverables: '', kpi_targets: '', budget: '', show_budget: false },
-  preferences: { tone: 'corporate', detail: 'medium', layout: 'landscape', include_about: true, include_past_projects: false,
-    dividers: true, intro_template: 'auto', conclusion_template: 'auto', version: '1.0', requirements: '', notes: '' },
+  client: { name: '', sector: '', logo: null },
+  project: { name: '', type: '', type_other: '', description: '', audience: [], audience_other: '', platforms: [], platforms_other: '', event_date: '' },
+  services: { selected: [], other: '' },
+  timeline: { duration_value: '', duration_unit: 'month', start_date: '' },
+  goals: { objective_keys: [], objectives: '' },
+  preferences: { design: 'ahdaf', tone: 'corporate', tone_other: '', detail: 'medium', layout: 'landscape', include_about: true, dividers: true, requirements: '' },
 });
 
 function merge(base, extra) {
@@ -38,7 +35,30 @@ function merge(base, extra) {
   for (const k of Object.keys(extra || {})) {
     out[k] = typeof base[k] === 'object' && base[k] && !Array.isArray(base[k]) ? { ...base[k], ...(extra[k] || {}) } : extra[k];
   }
+  // older proposals stored the audience as free text
+  if (typeof out.project.audience === 'string') {
+    out.project.audience_other = [out.project.audience_other, out.project.audience].filter(Boolean).join('، ');
+    out.project.audience = [];
+  }
   return out;
+}
+
+// Chips with a trailing «أخرى» that opens a free-text field
+function ChipsOther({ options, value, onChange, other, onOther, multi = true, placeholder = 'اكتب ما تريد…' }) {
+  const [open, setOpen] = useState(!!other);
+  const sel = multi ? (value || []) : value;
+  const isOn = (k) => (multi ? sel.includes(k) : sel === k);
+  const toggle = (k) => {
+    if (!multi) { onChange(sel === k ? '' : k); if (sel !== k) { setOpen(false); onOther && onOther(''); } return; }
+    onChange(sel.includes(k) ? sel.filter((x) => x !== k) : [...sel, k]);
+  };
+  return html`<div class="stack" style="gap:8px">
+    <div class="chips">
+      ${options.map((o) => html`<button type="button" class=${`chip ${isOn(o.value) ? 'on' : ''}`} aria-pressed=${isOn(o.value)} onClick=${() => toggle(o.value)}>${isOn(o.value) && multi ? html`<${Icon} name="check" size=${14} />` : null}${o.label}</button>`)}
+      <button type="button" class=${`chip ${open ? 'on' : ''}`} aria-pressed=${open} onClick=${() => { const n = !open; setOpen(n); if (!n) onOther(''); if (n && !multi) onChange(''); }}><${Icon} name=${open ? 'check' : 'plus'} size=${14} />أخرى</button>
+    </div>
+    ${open && html`<input class="input" value=${other || ''} placeholder=${placeholder} onInput=${(e) => onOther(e.target.value)} />`}
+  </div>`;
 }
 
 export function Wizard({ params, query }) {
@@ -46,21 +66,18 @@ export function Wizard({ params, query }) {
   const editId = params.id || null;
   const [data, setData] = useState(null);
   const [step, setStep] = useState(0);
-  const [lib, setLib] = useState({ services: [], sectors: [], intro: [], conclusion: [], clients: [] });
+  const [lib, setLib] = useState({ services: [], sectors: [], clients: [] });
   const [errors, setErrors] = useState({});
-  const [analysis, setAnalysis] = useState(null);
   const [gen, setGen] = useState(null);
   const [origin, setOrigin] = useState('');
 
-  // ---- load library + initial inputs
   useEffect(() => {
     setTitle(editId ? 'تعديل مدخلات العرض' : 'إنشاء عرض جديد');
     (async () => {
       try {
-        const [svc, sec, intro, concl, clients, settings] = await Promise.all([
-          api.get('/api/library/services'), api.get('/api/library/sectors'), api.get('/api/library/intro_templates'),
-          api.get('/api/library/conclusion_templates'), api.get('/api/clients'), api.get('/api/settings')]);
-        setLib({ services: svc.items.filter((s) => s.active), sectors: sec.items.filter((s) => s.active), intro: intro.items, conclusion: concl.items, clients: clients.items });
+        const [svc, sec, clients, settings] = await Promise.all([
+          api.get('/api/library/services'), api.get('/api/library/sectors'), api.get('/api/clients'), api.get('/api/settings')]);
+        setLib({ services: svc.items.filter((s) => s.active), sectors: sec.items.filter((s) => s.active), clients: clients.items });
         const base = empty();
         const sv = settings.values || {};
         base.preferences = { ...base.preferences, tone: sv.default_tone || 'corporate', detail: sv.default_detail || 'medium', layout: sv.default_layout || 'landscape' };
@@ -68,10 +85,9 @@ export function Wizard({ params, query }) {
         if (editId) {
           const p = await api.get(`/api/proposals/${editId}`);
           initial = merge(base, p.inputs);
+          if (!initial.preferences.design) initial.preferences.design = p.doc?.theme || 'ahdaf';
           setOrigin(`تعديل مدخلات: ${p.project_name}`);
-        } else if (query.get('template')) {
-          const t = (await api.get('/api/templates')).items.find((x) => x.id === query.get('template'));
-          if (t) { initial = merge(base, t.inputs); setOrigin(`من قالب: ${t.name}`); }
+          setStep(1);
         } else if (query.get('reuse')) {
           try {
             const saved = JSON.parse(sessionStorage.getItem(REUSE_KEY) || 'null');
@@ -79,19 +95,22 @@ export function Wizard({ params, query }) {
           } catch { /* ignore */ }
         } else if (query.get('client')) {
           const c = clients.items.find((x) => x.id === query.get('client'));
-          if (c) initial = merge(base, { client: { id: c.id, name: c.name, sector: c.sector || '', about: c.about || '', contact_name: c.contact_name || '', website: c.website || '', logo: c.logo } });
+          if (c) initial = merge(base, { client: { id: c.id, name: c.name, sector: c.sector || '', logo: c.logo } });
         } else {
           try {
             const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
-            if (draft && draft.client) { initial = merge(base, draft); setOrigin('استُكملت المسودة غير المكتملة'); }
+            if (draft && draft.client && (draft.client.name || draft.project?.name)) { initial = merge(base, draft); setOrigin('استُكملت المسودة غير المكتملة'); }
           } catch { /* ignore */ }
+        }
+        if (query.get('design') && DESIGN_KEYS.includes(query.get('design'))) {
+          initial.preferences = { ...initial.preferences, design: query.get('design') };
+          if (!editId) setStep(1);
         }
         setData(initial);
       } catch (e) { toastError(e); }
     })();
   }, [editId]);
 
-  // ---- autosave draft (new proposals only)
   useEffect(() => {
     if (!data || editId) return;
     try { localStorage.setItem(DRAFT_KEY, JSON.stringify(data)); } catch { /* storage unavailable */ }
@@ -100,39 +119,26 @@ export function Wizard({ params, query }) {
   if (!data) return html`<div class="content" style="display:grid;place-items:center;min-height:50vh"><${Spinner} /></div>`;
 
   const set = (group, key, value) => setData((d) => ({ ...d, [group]: { ...d[group], [key]: value } }));
-  const type = data.project.type;
-  const typeMeta = (meta?.project_types || []).find((t) => t.key === type);
-
-  const validate = (i) => {
+  const validate = () => {
     const e = {};
-    if (i === 0 && !data.client.name.trim()) e['client.name'] = 'اكتب اسم العميل';
-    if (i === 1) {
-      if (!data.project.name.trim()) e['project.name'] = 'اكتب اسم المشروع';
-      if (!data.project.type) e['project.type'] = 'اختر نوع المشروع';
-    }
+    if (!data.client.name.trim()) e.client = 'اكتب اسم العميل';
+    if (!data.project.name.trim()) e.project = 'اكتب اسم المشروع';
+    if (!data.project.type) e.type = 'اختر نوع المشروع';
+    if (data.project.type === 'other' && !data.project.type_other.trim()) e.type = 'اكتب نوع المشروع';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
   const go = (i) => {
-    if (i > step) { for (let s = step; s < i; s++) if (!validate(s)) { setStep(s); return; } }
+    if (i === 2 && step < 2 && !validate()) { setStep(1); return; }
     setStep(i);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    if (i === STEPS.length - 1) runAnalysis();
-  };
-  const runAnalysis = () => api.post('/api/proposals/analyze', { inputs: data }).then(setAnalysis).catch(() => setAnalysis(null));
-
-  const suggestServices = () => {
-    if (!typeMeta) return;
-    const avail = new Set(lib.services.map((s) => s.key));
-    set('services', 'selected', typeMeta.default_services.filter((k) => avail.has(k)));
-    toast('تم اختيار الخدمات المعتادة لهذا النوع من المشاريع');
   };
 
   const generate = async () => {
-    for (let s = 0; s < 2; s++) if (!validate(s)) { setStep(s); return; }
+    if (!validate()) { setStep(1); return; }
     if (editId) {
       const ok = await confirmDialog({ title: 'إعادة توليد العرض', confirmLabel: 'إعادة التوليد',
-        message: 'سيُعاد توليد جميع أقسام العرض بالمدخلات الجديدة، وستُحفظ النسخة الحالية في سجل النسخ لتتمكن من استرجاعها.' });
+        message: 'سيُعاد توليد العرض بالمدخلات الجديدة، وتُحفظ النسخة الحالية في سجل النسخ لتتمكن من استرجاعها.' });
       if (!ok) return;
     }
     const started = Date.now();
@@ -157,17 +163,16 @@ export function Wizard({ params, query }) {
   };
 
   const reset = async () => {
-    if (!(await confirmDialog({ title: 'بدء عرض جديد من الصفر', message: 'ستُمسح كل المدخلات الحالية في هذا النموذج.', confirmLabel: 'مسح المدخلات', danger: true }))) return;
+    if (!(await confirmDialog({ title: 'البدء من جديد', message: 'ستُمسح المدخلات الحالية في هذا النموذج.', confirmLabel: 'مسح المدخلات', danger: true }))) return;
     try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
     setData(empty()); setStep(0); setOrigin('');
   };
 
   const progress = Math.round(((step + 1) / STEPS.length) * 100);
   const S = STEPS[step];
-
   return html`<div class="content">
-    <div class="page-head"><div><h1>${editId ? 'تعديل مدخلات العرض' : 'إنشاء عرض فني جديد'}</h1><p>${origin || 'سبع خطوات قصيرة، ثم يكتب النظام العرض كاملًا. الحقول غير الإلزامية يمكن تركها.'}</p></div>
-      <div class="actions">${!editId && html`<${Btn} kind="ghost" icon="refresh" onClick=${reset}>بدء من الصفر</${Btn}>`}</div></div>
+    <div class="page-head"><div><h1>${editId ? 'تعديل مدخلات العرض' : 'إنشاء عرض فني جديد'}</h1><p>${origin || 'ثلاث خطوات قصيرة. أعطنا الأساسيات، والنظام يقترح الفكرة والأهداف والجمهور والخطة كاملة.'}</p></div>
+      <div class="actions">${!editId && html`<${Btn} kind="ghost" icon="refresh" onClick=${reset}>البدء من جديد</${Btn}>`}</div></div>
     <div class="wiz">
       <aside class="card-ui wiz-steps" aria-label="خطوات الإنشاء">
         <div class="inline" style="justify-content:space-between;font-size:13px"><b style="color:var(--night)">الخطوة ${step + 1} من ${STEPS.length}</b><span class="muted">${progress}%</span></div>
@@ -176,16 +181,13 @@ export function Wizard({ params, query }) {
       </aside>
       <section class="card-ui wiz-card">
         <div class="step-h"><div><div class="k">الخطوة ${step + 1}</div><h2>${S.title}</h2><p>${S.desc}</p></div></div>
-        ${step === 0 && html`<${StepClient} data=${data} set=${set} lib=${lib} errors=${errors} setData=${setData} />`}
-        ${step === 1 && html`<${StepProject} data=${data} set=${set} meta=${meta} errors=${errors} />`}
-        ${step === 2 && html`<${StepScope} data=${data} set=${set} />`}
-        ${step === 3 && html`<${StepServices} data=${data} set=${set} meta=${meta} lib=${lib} suggest=${suggestServices} typeMeta=${typeMeta} />`}
-        ${step === 4 && html`<${StepTimeline} data=${data} set=${set} typeMeta=${typeMeta} />`}
-        ${step === 5 && html`<${StepGoals} data=${data} set=${set} />`}
-        ${step === 6 && html`<${StepPrefs} data=${data} set=${set} meta=${meta} lib=${lib} analysis=${analysis} goTo=${go} />`}
+        ${step === 0 && html`<${DesignPicker} value=${data.preferences.design} onChange=${(k) => set('preferences', 'design', k)} />`}
+        ${step === 1 && html`<${StepProject} data=${data} set=${set} meta=${meta} lib=${lib} errors=${errors} setData=${setData} />`}
+        ${step === 2 && html`<${StepSuggest} data=${data} set=${set} meta=${meta} lib=${lib} />`}
         <div class="wiz-nav">
           ${step > 0 && html`<${Btn} kind="light" icon="chevronRight" onClick=${() => go(step - 1)}>السابق</${Btn}>`}
           <span class="spacer"></span>
+          ${step === 1 && html`<${Btn} kind="ghost" icon="wand" onClick=${generate}>ولّد الآن بالاقتراحات التلقائية</${Btn}>`}
           ${step < STEPS.length - 1
             ? html`<${Btn} kind="primary" onClick=${() => go(step + 1)}>التالي <${Icon} name="chevronLeft" /></${Btn}>`
             : html`<${Btn} kind="primary" size="lg" icon="wand" onClick=${generate}>${editId ? 'إعادة توليد العرض' : 'توليد العرض الفني'}</${Btn}>`}
@@ -197,213 +199,109 @@ export function Wizard({ params, query }) {
 }
 
 function Generating({ stage }) {
-  const steps = ['تحليل معلومات المشروع والقطاع', 'صياغة المقدمة وفهم المشروع والأهداف', 'بناء المنهجية والجدول الزمني', 'تجهيز المخرجات والفريق والمؤشرات', 'مراجعة الصياغة وتنسيق الصفحات'];
+  const steps = ['قراءة المشروع والقطاع', 'ابتكار الفكرة والرسالة', 'اقتراح الأفكار التفعيلية والمحتوى', 'بناء المنهجية والجدول والفريق', 'تنسيق الصفحات بالتصميم المختار'];
   return html`<div class="gen-overlay" role="alert" aria-busy="true"><div class="gen-box">
     <div class="gen-stairs" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
-    <h2>نكتب العرض الفني الآن</h2><p>نحلل المدخلات ونصوغ كل قسم بحسب المشروع.</p>
+    <h2>نجهّز العرض الفني</h2><p>نقرأ المشروع ونقترح الفكرة والخطة كاملة.</p>
     <ul class="gen-steps">${steps.map((s, i) => html`<li class=${i < stage ? 'done' : i === stage ? 'now' : ''}><span class="s">${i < stage ? html`<${Icon} name="check" size=${13} />` : ''}</span>${s}</li>`)}</ul>
   </div></div>`;
 }
 
-// ---------------------------------------------------------------- steps
-function StepClient({ data, set, lib, errors, setData }) {
+function StepProject({ data, set, meta, lib, errors, setData }) {
   const c = data.client;
-  const sectorOptions = lib.sectors.map((s) => ({ value: s.key, label: s.title }));
+  const p = data.project;
   const known = lib.sectors.some((s) => s.key === c.sector);
-  const [custom, setCustom] = useState(c.sector && !known);
+  const [customSector, setCustomSector] = useState(!!c.sector && !known);
   const pickClient = (name) => {
-    set('client', 'name', name);
     const found = lib.clients.find((x) => x.name === name);
-    if (found) {
-      setData((d) => ({ ...d, client: { ...d.client, id: found.id, name: found.name, sector: found.sector || d.client.sector, about: found.about || d.client.about, contact_name: found.contact_name || d.client.contact_name, website: found.website || d.client.website, logo: found.logo || d.client.logo } }));
-      toast('تم استكمال بيانات العميل من سجل العملاء');
-    } else {
-      setData((d) => ({ ...d, client: { ...d.client, id: undefined, name } }));
-    }
+    setData((d) => ({ ...d, client: found ? { ...d.client, id: found.id, name: found.name, sector: found.sector || d.client.sector, logo: found.logo || d.client.logo } : { ...d.client, id: undefined, name } }));
   };
+  const types = [...(meta?.project_types || []).filter((t) => t.key !== 'other')];
   return html`<div class="stack">
     <div class="row">
-      <${Field} label="اسم العميل" required id="c-name" error=${errors['client.name']} hint="اكتب الاسم كما يجب أن يظهر في العرض. يمكنك الاختيار من العملاء السابقين.">
-        <input id="c-name" class=${`input ${errors['client.name'] ? 'invalid' : ''}`} list="clients-list" value=${c.name} onInput=${(e) => set('client', 'name', e.target.value)} onChange=${(e) => pickClient(e.target.value)} placeholder="مثال: شركة ... للتطوير العقاري" />
+      <${Field} label="اسم العميل" required id="c-name" error=${errors.client}>
+        <input id="c-name" class=${`input ${errors.client ? 'invalid' : ''}`} list="clients-list" value=${c.name} onInput=${(e) => set('client', 'name', e.target.value)} onChange=${(e) => pickClient(e.target.value)} placeholder="مثال: شركة … للتطوير العقاري" />
         <datalist id="clients-list">${lib.clients.map((x) => html`<option value=${x.name} />`)}</datalist>
       </${Field}>
-      <${Field} label="القطاع" id="c-sector" hint="يُستخدم لفهم قرار العميل وزوايا المحتوى والاعتبارات التنظيمية.">
-        ${custom
-          ? html`<div class="inline" style="flex-wrap:nowrap"><input id="c-sector" class="input" value=${c.sector} onInput=${(e) => set('client', 'sector', e.target.value)} placeholder="اكتب القطاع" /><${Btn} kind="ghost" size="sm" onClick=${() => { setCustom(false); set('client', 'sector', ''); }}>من القائمة</${Btn}></div>`
-          : html`<${Select} id="c-sector" value=${c.sector} placeholder="اختر القطاع" options=${[...sectorOptions, { value: '__custom', label: 'قطاع آخر…' }]} onChange=${(v) => { if (v === '__custom') { setCustom(true); set('client', 'sector', ''); } else set('client', 'sector', v); }} />`}
+      <${Field} label="القطاع" id="c-sector" hint="إن تركته، يستنتجه النظام من اسم المشروع ووصفه.">
+        ${customSector
+          ? html`<div class="inline" style="flex-wrap:nowrap"><input id="c-sector" class="input" value=${c.sector} onInput=${(e) => set('client', 'sector', e.target.value)} placeholder="اكتب القطاع" /><${Btn} kind="ghost" size="sm" onClick=${() => { setCustomSector(false); set('client', 'sector', ''); }}>القائمة</${Btn}></div>`
+          : html`<${Select} id="c-sector" value=${c.sector} placeholder="اختر القطاع" options=${[...lib.sectors.filter((s) => s.key !== 'general').map((s) => ({ value: s.key, label: s.title })), { value: '__other', label: 'أخرى…' }]}
+              onChange=${(v) => { if (v === '__other') { setCustomSector(true); set('client', 'sector', ''); } else set('client', 'sector', v); }} />`}
       </${Field}>
     </div>
-    <${Field} label="نبذة عن العميل" optional hint="سطر أو سطران عن نشاط العميل. تظهر في قسم «فهمنا للمشروع» كما كتبتها.">
-      <${TextArea} value=${c.about} onInput=${(v) => set('client', 'about', v)} minRows=${2} placeholder="مثال: مطور عقاري يطلق مشروعًا سكنيًا جديدًا في شمال الرياض." />
-    </${Field}>
-    <div class="row">
-      <${Field} label="جهة التواصل لدى العميل" optional><${Input} value=${c.contact_name} onInput=${(v) => set('client', 'contact_name', v)} placeholder="الاسم أو الإدارة" /></${Field}>
-      <${Field} label="الموقع أو الحساب الرئيسي" optional><${Input} class="input ltr" value=${c.website} onInput=${(v) => set('client', 'website', v)} placeholder="www.example.com" /></${Field}>
-    </div>
-    <${Field} label="شعار العميل" optional hint="يظهر على الغلاف وبجانب شعار أهداف في رأس الصفحات. يفضّل PNG بخلفية شفافة.">
-      <${ImagePicker} value=${c.logo} onChange=${(v) => set('client', 'logo', v)} onUpload=${api.upload} label="رفع الشعار" />
-    </${Field}>
-  </div>`;
-}
-
-function StepProject({ data, set, meta, errors }) {
-  const p = data.project;
-  return html`<div class="stack">
-    <${Field} label="اسم المشروع" required id="p-name" error=${errors['project.name']}>
-      <input id="p-name" class=${`input ${errors['project.name'] ? 'invalid' : ''}`} value=${p.name} onInput=${(e) => set('project', 'name', e.target.value)} placeholder="مثال: إدارة حساب تيك توك، حفل تدشين مشروع…" />
+    <${Field} label="اسم المشروع" required id="p-name" error=${errors.project}>
+      <input id="p-name" class=${`input ${errors.project ? 'invalid' : ''}`} value=${p.name} onInput=${(e) => set('project', 'name', e.target.value)} placeholder="مثال: إدارة حساب تيك توك، حفل تدشين، حملة رمضان…" />
     </${Field}>
     <div class="field"><span class="lbl">نوع المشروع<span class="req">*</span></span>
-      <div class="type-grid" role="radiogroup">${(meta?.project_types || []).map((t) => html`<button type="button" role="radio" aria-checked=${p.type === t.key} class=${`type-opt ${p.type === t.key ? 'on' : ''}`} onClick=${() => set('project', 'type', t.key)}><span class="ti"><${Icon} name=${t.icon} /></span>${t.label}</button>`)}</div>
-      ${errors['project.type'] && html`<span class="err">${errors['project.type']}</span>`}
+      <div class="type-grid" role="radiogroup">
+        ${types.map((t) => html`<button type="button" role="radio" aria-checked=${p.type === t.key} class=${`type-opt ${p.type === t.key ? 'on' : ''}`} onClick=${() => set('project', 'type', t.key)}><span class="ti"><${Icon} name=${t.icon} /></span>${t.label}</button>`)}
+        <button type="button" role="radio" aria-checked=${p.type === 'other'} class=${`type-opt ${p.type === 'other' ? 'on' : ''}`} onClick=${() => set('project', 'type', 'other')}><span class="ti"><${Icon} name="plus" /></span>أخرى</button>
+      </div>
+      ${p.type === 'other' && html`<input class="input" style="margin-top:8px" value=${p.type_other} onInput=${(e) => set('project', 'type_other', e.target.value)} placeholder="اكتب نوع المشروع، مثل: رحلة تعريفية للإعلاميين" />`}
+      ${errors.type && html`<span class="err">${errors.type}</span>`}
     </div>
-    <${Field} label="وصف المشروع" hint="ما المطلوب تحديدًا؟ كلما كان الوصف أوضح، كان العرض أدق.">
-      <${TextArea} value=${p.description} onInput=${(v) => set('project', 'description', v)} minRows=${3} placeholder="مثال: إدارة حساب الشركة على تيك توك وصناعة محتوى قصير يعرض الأسطول وتجربة الحجز والاستلام." />
+    <${Field} label="وصف مختصر" optional hint="سطر أو سطران يكفيان. النظام يقترح الفكرة والأهداف والجمهور والخطة.">
+      <${TextArea} value=${p.description} onInput=${(v) => set('project', 'description', v)} minRows=${2} placeholder="مثال: نبي نرفع حضور الشركة على تيك توك ونزيد الحجوزات." />
     </${Field}>
-    <div class="row">
-      <${Field} label="الجمهور المستهدف" optional hint="الفئة، المدينة، الاهتمامات. لن يُخترع إن تُرك فارغًا.">
-        <${TextArea} value=${p.audience} onInput=${(v) => set('project', 'audience', v)} minRows=${2} placeholder="مثال: العائلات والمسافرون بين المدن" />
-      </${Field}>
-      <${Field} label="التحدي أو الوضع الحالي" optional hint="ما المشكلة التي يريد العميل حلها؟">
-        <${TextArea} value=${p.challenge} onInput=${(v) => set('project', 'challenge', v)} minRows=${2} placeholder="مثال: الحساب ينشر عروضًا فقط والتفاعل منخفض." />
-      </${Field}>
-    </div>
-    ${PLATFORM_TYPES.includes(p.type) && html`<${Field} label="المنصات المستهدفة" optional hint="يكتشفها النظام أيضًا من الوصف إن لم تحددها.">
-      <${Chips} options=${(meta?.platforms || []).map((x) => ({ value: x.key, label: x.label }))} value=${p.platforms || []} onChange=${(v) => set('project', 'platforms', v)} />
-    </${Field}>`}
-    ${EVENT_TYPES.includes(p.type) && html`<div class="row">
-      <${Field} label=${p.type === 'exhibition' ? 'تاريخ افتتاح المعرض' : 'تاريخ الفعالية'} optional><input class="input" type="date" value=${p.event_date} onInput=${(e) => set('project', 'event_date', e.target.value)} /></${Field}>
-      <${Field} label="الموقع / المدينة" optional><${Input} value=${p.location} onInput=${(v) => set('project', 'location', v)} placeholder="مثال: الرياض" /></${Field}>
-    </div>`}
-    ${!EVENT_TYPES.includes(p.type) && html`<${Field} label="المدينة أو النطاق الجغرافي" optional><${Input} value=${p.location} onInput=${(v) => set('project', 'location', v)} placeholder="مثال: الرياض وجدة" /></${Field}>`}
+    <${Field} label="شعار العميل" optional><${ImagePicker} value=${c.logo} onChange=${(v) => set('client', 'logo', v)} onUpload=${api.upload} label="رفع الشعار" /></${Field}>
   </div>`;
 }
 
-function StepScope({ data, set }) {
-  return html`<div class="stack">
-    <${Field} label="نطاق العمل" hint="ما الذي سيشمله العمل تحديدًا؟ يُستخدم في قسم «نطاق العمل».">
-      <${TextArea} value=${data.scope.description} onInput=${(v) => set('scope', 'description', v)} minRows=${4} placeholder="مثال: إدارة الحساب يوميًا، وإنتاج الفيديوهات القصيرة، والرد على التعليقات، والتقارير الشهرية." />
-    </${Field}>
-    <${Field} label="خارج نطاق العمل" optional hint="سطر لكل بند. يظهر كقائمة واضحة لتجنب سوء الفهم لاحقًا.">
-      <${TextArea} value=${data.scope.out_of_scope} onInput=${(v) => set('scope', 'out_of_scope', v)} minRows=${2} placeholder="مثال: ميزانية الإعلانات الممولة" />
-    </${Field}>
-    <${Field} label="متطلبات خاصة من العميل" optional hint="تظهر في العرض تحت «متطلبات خاصة أكد عليها العميل». سطر لكل متطلب.">
-      <${TextArea} value=${data.preferences.requirements} onInput=${(v) => set('preferences', 'requirements', v)} minRows=${2} placeholder="مثال: تسليم المحتوى قبل رمضان بأسبوعين" />
-    </${Field}>
-    <${Field} label="ملاحظات داخلية" optional hint="للفريق فقط، لا تظهر في العرض.">
-      <${TextArea} value=${data.preferences.notes} onInput=${(v) => set('preferences', 'notes', v)} minRows=${2} />
-    </${Field}>
-  </div>`;
-}
-
-function StepServices({ data, set, meta, lib, suggest, typeMeta }) {
-  const selected = data.services.selected || [];
-  const toggle = (k) => set('services', 'selected', selected.includes(k) ? selected.filter((x) => x !== k) : [...selected, k]);
-  const groups = (meta?.categories || []).map((c) => ({ ...c, items: lib.services.filter((s) => (s.data?.category || 'pm') === c.key) })).filter((g) => g.items.length);
-  const custom = data.services.custom || [];
-  const setCustom = (arr) => set('services', 'custom', arr);
-  return html`<div class="stack">
-    <div class="notice info"><${Icon} name="info" /><div>اختر الخدمات المطلوبة. كل خدمة تضيف مخرجاتها وأنشطتها ومؤشراتها والأدوار اللازمة لها إلى العرض تلقائيًا.
-      ${typeMeta && html` <button class="btn soft sm" style="margin-inline-start:6px" onClick=${suggest}><${Icon} name="wand" size=${15} />اقتراح خدمات «${typeMeta.label}»</button>`}</div></div>
-    <div class="svc-groups">${groups.map((g) => html`<div class="svc-group"><h4><${Icon} name=${g.icon} size=${17} />${g.label}</h4>
-      ${g.items.map((s) => html`<label class="check"><input type="checkbox" checked=${selected.includes(s.key)} onChange=${() => toggle(s.key)} /><span>${s.title}<small>${s.data?.description || ''}</small></span></label>`)}</div>`)}</div>
-    <div class="field"><span class="lbl">خدمات مخصصة <span class="opt">(اختياري)</span></span>
-      <div class="rep">${custom.map((c, i) => html`<div class="rep-item"><div class="rh"><span>خدمة مخصصة ${i + 1}</span><span class="grow"></span><button class="btn ghost icon sm" aria-label="حذف" onClick=${() => setCustom(custom.filter((_, j) => j !== i))}><${Icon} name="trash" size=${16} /></button></div>
-        <div class="row"><${Input} value=${c.title} placeholder="اسم الخدمة" onInput=${(v) => setCustom(custom.map((x, j) => (j === i ? { ...x, title: v } : x)))} /><${Input} value=${c.description} placeholder="وصف مختصر" onInput=${(v) => setCustom(custom.map((x, j) => (j === i ? { ...x, description: v } : x)))} /></div></div>`)}
-        <div><${Btn} kind="soft" size="sm" icon="plus" onClick=${() => setCustom([...custom, { title: '', description: '' }])}>إضافة خدمة مخصصة</${Btn}></div></div>
-    </div>
-    <p class="muted" style="font-size:13px">${selected.length ? `${selected.length} خدمة مختارة` : 'إن لم تختر أي خدمة، سيقترح النظام الخدمات المعتادة لنوع المشروع.'}</p>
-  </div>`;
-}
-
-function StepTimeline({ data, set, typeMeta }) {
+function StepSuggest({ data, set, meta, lib }) {
+  const p = data.project;
+  const sectorKey = data.client.sector;
+  const segments = (meta?.segments || {})[sectorKey] || (meta?.segments || {}).general || [];
+  const defaultsObj = (meta?.default_objectives || {})[p.type] || [];
+  const objOptions = [...(meta?.objectives || [])].sort((a, b) => (defaultsObj.includes(b.key) ? 1 : 0) - (defaultsObj.includes(a.key) ? 1 : 0)).slice(0, 10);
+  const typeMeta = (meta?.project_types || []).find((t) => t.key === p.type);
+  const relevant = lib.services.filter((s) => {
+    const types = s.data?.types || [];
+    return types.includes('*') || types.includes(p.type) || (typeMeta?.default_services || []).includes(s.key);
+  });
   const t = data.timeline;
-  const unitDays = { day: 1, week: 7, month: 30.4 };
-  const start = parseISO(t.start_date);
-  const days = t.duration_value ? Math.round(Number(t.duration_value) * unitDays[t.duration_unit || 'month']) : 0;
-  const computedEnd = start && days ? addDays(start, days - 1) : null;
-  const setEnd = (iso) => {
-    set('timeline', 'end_date', iso);
-    const e = parseISO(iso);
-    if (start && e && e > start) {
-      const d = Math.round((e - start) / 86400000) + 1;
-      if (d % 7 === 0 && d < 70) { set('timeline', 'duration_value', d / 7); set('timeline', 'duration_unit', 'week'); }
-      else if (d >= 56) { set('timeline', 'duration_value', Math.round(d / 30.4)); set('timeline', 'duration_unit', 'month'); }
-      else { set('timeline', 'duration_value', d); set('timeline', 'duration_unit', 'day'); }
-    }
-  };
-  return html`<div class="stack">
-    <div class="row">
-      <${Field} label="مدة المشروع" hint=${typeMeta ? `إن تُركت فارغة تُستخدم مدة افتراضية مناسبة لـ«${typeMeta.label}» ويُنبَّه إليها.` : ''}>
-        <div class="inline" style="flex-wrap:nowrap"><input class="input" type="number" min="1" style="max-width:120px" value=${t.duration_value} onInput=${(e) => { set('timeline', 'duration_value', e.target.value); set('timeline', 'end_date', ''); }} placeholder="6" />
-        <${Seg} value=${t.duration_unit || 'month'} onChange=${(v) => { set('timeline', 'duration_unit', v); set('timeline', 'end_date', ''); }} options=${[{ value: 'day', label: 'يوم' }, { value: 'week', label: 'أسبوع' }, { value: 'month', label: 'شهر' }]} /></div>
-      </${Field}>
-      <${Field} label="عدد أعضاء الفريق" optional hint="يُبنى الفريق المقترح على هذا العدد وعلى الخدمات المختارة.">
-        <input class="input" type="number" min="1" max="30" value=${t.team_size} onInput=${(e) => set('timeline', 'team_size', e.target.value)} placeholder="مثال: 5" />
-      </${Field}>
-    </div>
-    <div class="row">
-      <${Field} label="تاريخ البداية" optional hint="بدونه يُعرض الجدول الزمني بالأسابيع."><input class="input" type="date" value=${t.start_date} onInput=${(e) => set('timeline', 'start_date', e.target.value)} /></${Field}>
-      <${Field} label="تاريخ النهاية" optional hint=${computedEnd && !t.end_date ? `محسوب تلقائيًا: ${fmtDate(computedEnd)}` : 'يُحسب من المدة، أو حدده لتُحسب المدة منه.'}>
-        <input class="input" type="date" value=${t.end_date || (computedEnd ? toISO(computedEnd) : '')} onInput=${(e) => setEnd(e.target.value)} />
-      </${Field}>
-    </div>
-  </div>`;
-}
-
-function StepGoals({ data, set }) {
-  const g = data.goals;
-  return html`<div class="stack">
-    <${Field} label="أهداف المشروع" hint="سطر لكل هدف. أي رقم تكتبه (مثل 30%) يصبح القيمة المستهدفة للمؤشر؛ وبدون أرقام يُكتب «يُحدد بعد قياس خط الأساس».">
-      <${TextArea} value=${g.objectives} onInput=${(v) => set('goals', 'objectives', v)} minRows=${4} placeholder=${'رفع الوعي بالعلامة في الرياض\nزيادة الحجوزات من المنصات الرقمية\nنمو المتابعين 30%'} />
+  const durKey = (DURATIONS.find((d) => String(d.v) === String(t.duration_value) && d.u === t.duration_unit) || {}).value || '';
+  const [customDur, setCustomDur] = useState(!!t.duration_value && !durKey);
+  const pr = data.preferences;
+  return html`<div class="stack" style="gap:20px">
+    <div class="notice info"><${Icon} name="wand" /><span>كل ما في هذه الخطوة اختياري. ما تتركه فارغًا يقترحه النظام بنفسه، وكل شيء قابل للتعديل بعد التوليد.</span></div>
+    <${Field} label="الجمهور المستهدف">
+      <${ChipsOther} options=${segments.map((s) => ({ value: s, label: s }))} value=${p.audience || []} onChange=${(v) => set('project', 'audience', v)}
+        other=${p.audience_other} onOther=${(v) => set('project', 'audience_other', v)} placeholder="اكتب شريحة أخرى" />
     </${Field}>
-    <${Field} label="المخرجات المطلوبة" optional hint="سطر لكل مخرج مع الكمية إن وُجدت، مثل «12 فيديو شهريًا». تُضاف مخرجات الخدمات المختارة تلقائيًا، والكميات قابلة للتعديل لاحقًا.">
-      <${TextArea} value=${g.deliverables} onInput=${(v) => set('goals', 'deliverables', v)} minRows=${3} placeholder=${'12 فيديو شهريًا\n20 قصة شهريًا'} />
+    <${Field} label="الأهداف" hint="اكتب رقمًا في «أخرى» إن كان عندك هدف رقمي، مثل: نمو المتابعين 30%.">
+      <${ChipsOther} options=${objOptions.map((o) => ({ value: o.key, label: o.label }))} value=${data.goals.objective_keys || []} onChange=${(v) => set('goals', 'objective_keys', v)}
+        other=${data.goals.objectives} onOther=${(v) => set('goals', 'objectives', v)} placeholder="هدف آخر" />
     </${Field}>
-    <${Field} label="قيم مستهدفة معروفة لمؤشرات الأداء" optional hint="بصيغة «المؤشر: القيمة»، مثل «معدل التفاعل: 5%». اتركه فارغًا إن لم تُتفق بعد.">
-      <${TextArea} value=${g.kpi_targets} onInput=${(v) => set('goals', 'kpi_targets', v)} minRows=${2} />
+    ${PLATFORM_TYPES.includes(p.type) && html`<${Field} label="المنصات">
+      <${ChipsOther} options=${(meta?.platforms || []).map((x) => ({ value: x.key, label: x.label }))} value=${p.platforms || []} onChange=${(v) => set('project', 'platforms', v)}
+        other=${p.platforms_other} onOther=${(v) => set('project', 'platforms_other', v)} placeholder="منصة أخرى" />
+    </${Field}>`}
+    <${Field} label="الخدمات" hint="إن لم تختر، يقترح النظام الخدمات المناسبة لنوع المشروع.">
+      <${ChipsOther} options=${relevant.map((s) => ({ value: s.key, label: s.title }))} value=${data.services.selected || []} onChange=${(v) => set('services', 'selected', v)}
+        other=${data.services.other} onOther=${(v) => set('services', 'other', v)} placeholder="خدمة أخرى" />
     </${Field}>
     <div class="row">
-      <${Field} label="الميزانية" optional hint="لا تظهر في العرض إلا إذا فعّلت الخيار.">
-        <${Input} value=${g.budget} onInput=${(v) => set('goals', 'budget', v)} placeholder="مثال: 250,000 ريال" />
+      <div class="field"><span class="lbl">المدة</span>
+        <div class="chips">${DURATIONS.map((d) => html`<button type="button" class=${`chip ${!customDur && durKey === d.value ? 'on' : ''}`} onClick=${() => { setCustomDur(false); set('timeline', 'duration_value', durKey === d.value ? '' : d.v); set('timeline', 'duration_unit', d.u); }}>${d.label}</button>`)}
+          <button type="button" class=${`chip ${customDur ? 'on' : ''}`} onClick=${() => setCustomDur(!customDur)}><${Icon} name=${customDur ? 'check' : 'plus'} size=${14} />أخرى</button></div>
+        ${customDur && html`<div class="inline" style="flex-wrap:nowrap;margin-top:8px"><input class="input" type="number" min="1" style="max-width:110px" value=${t.duration_value} onInput=${(e) => set('timeline', 'duration_value', e.target.value)} />
+          <${Seg} value=${t.duration_unit || 'month'} onChange=${(v) => set('timeline', 'duration_unit', v)} options=${[{ value: 'day', label: 'يوم' }, { value: 'week', label: 'أسبوع' }, { value: 'month', label: 'شهر' }]} /></div>`}
+      </div>
+      <${Field} label=${EVENT_TYPES.includes(p.type) ? 'تاريخ البداية / تاريخ الفعالية' : 'تاريخ البداية'} optional>
+        <div class="inline" style="flex-wrap:nowrap"><input class="input" type="date" value=${t.start_date} onInput=${(e) => set('timeline', 'start_date', e.target.value)} aria-label="تاريخ البداية" />
+        ${EVENT_TYPES.includes(p.type) && html`<input class="input" type="date" value=${p.event_date} onInput=${(e) => set('project', 'event_date', e.target.value)} aria-label="تاريخ الفعالية" />`}</div>
       </${Field}>
-      <div class="field" style="justify-content:flex-end"><${Switch} checked=${g.show_budget} onChange=${(v) => set('goals', 'show_budget', v)} label="إظهار الميزانية في العرض (قسم الإطار المالي)" /></div>
-    </div>
-  </div>`;
-}
-
-function StepPrefs({ data, set, meta, lib, analysis, goTo }) {
-  const p = data.preferences;
-  const missing = analysis?.missing || [];
-  const a = analysis?.analysis;
-  return html`<div class="stack">
-    <div class="field"><span class="lbl">أسلوب العرض</span>
-      <div class="tone-grid">${(meta?.tones || []).map((t) => html`<button type="button" class=${`tone-opt ${p.tone === t.key ? 'on' : ''}`} aria-pressed=${p.tone === t.key} onClick=${() => set('preferences', 'tone', t.key)}><b>${t.label}</b><span>${TONE_HINT[t.key]}</span></button>`)}</div></div>
-    <div class="row">
-      <div class="field"><span class="lbl">مستوى التفصيل</span><${Seg} value=${p.detail} onChange=${(v) => set('preferences', 'detail', v)} options=${(meta?.details || []).map((d) => ({ value: d.key, label: d.label }))} /></div>
-      <div class="field"><span class="lbl">شكل الصفحات</span><${Seg} value=${p.layout} onChange=${(v) => set('preferences', 'layout', v)} options=${[{ value: 'landscape', label: 'أفقي 16:9 (عروض أهداف)' }, { value: 'portrait', label: 'مستند A4 عمودي' }]} /></div>
     </div>
     <div class="row">
-      <${Field} label="المقدمة"><${Select} value=${p.intro_template} onChange=${(v) => set('preferences', 'intro_template', v)} options=${[{ value: 'auto', label: 'تُكتب تلقائيًا حسب المشروع (موصى به)' }, ...lib.intro.map((t) => ({ value: t.id, label: `قالب: ${t.title}` }))]} /></${Field}>
-      <${Field} label="الخاتمة"><${Select} value=${p.conclusion_template} onChange=${(v) => set('preferences', 'conclusion_template', v)} options=${[{ value: 'auto', label: 'تُكتب تلقائيًا حسب المشروع (موصى به)' }, ...lib.conclusion.map((t) => ({ value: t.id, label: `قالب: ${t.title}` }))]} /></${Field}>
+      <${Field} label="أسلوب الكتابة">
+        <${ChipsOther} multi=${false} options=${(meta?.tones || []).map((x) => ({ value: x.key, label: x.label }))} value=${pr.tone_other ? '' : pr.tone}
+          onChange=${(v) => set('preferences', 'tone', v || 'corporate')} other=${pr.tone_other} onOther=${(v) => set('preferences', 'tone_other', v)} placeholder="صف الأسلوب الذي تريده" />
+      </${Field}>
+      <div class="field"><span class="lbl">مستوى التفصيل</span><${Seg} value=${pr.detail} onChange=${(v) => set('preferences', 'detail', v)} options=${(meta?.details || []).map((d) => ({ value: d.key, label: d.label }))} /></div>
     </div>
-    <div class="inline" style="gap:22px">
-      <${Switch} checked=${p.include_about} onChange=${(v) => set('preferences', 'include_about', v)} label="تضمين «عن أهداف»" />
-      <${Switch} checked=${p.dividers} onChange=${(v) => set('preferences', 'dividers', v)} label="صفحات فاصلة بين الأقسام الرئيسية" />
-      <${Switch} checked=${p.include_past_projects} onChange=${(v) => set('preferences', 'include_past_projects', v)} label="أعمال سابقة ذات صلة من المكتبة" />
-    </div>
-    <div class="row" style="--n:3"><${Field} label="نسخة العرض"><${Input} value=${p.version} onInput=${(v) => set('preferences', 'version', v)} /></${Field}></div>
-
-    <div class="card-ui pad" style="background:#FCFBFE">
-      <h3 style="font-size:16px">ما فهمه النظام من المدخلات</h3>
-      ${!analysis ? html`<div class="skeleton" style="height:60px;margin-top:10px"></div>` : html`
-        <div class="analysis" style="margin-top:12px">
-          <div><span>نوع المشروع</span><b>${a.type}</b></div><div><span>القطاع</span><b>${a.sector}</b></div>
-          <div><span>المدة</span><b>${a.duration}</b></div><div><span>المنصات</span><b>${a.platforms.length ? a.platforms.join('، ') : '—'}</b></div>
-          <div><span>الأهداف</span><b>${a.objectives.length} ${analysis.objectives_suggested ? '(مقترحة)' : ''}</b></div><div><span>الخدمات</span><b>${analysis.service_labels.length}</b></div>
-        </div>
-        ${missing.length ? html`<div class="notice warn" style="margin-top:14px"><${Icon} name="alert" /><div><b>معلومات لم تُدخل (لن يخترعها النظام):</b>
-          <div class="missing-list">${missing.map((m) => html`<div><b>${m.label}:</b><span>${m.hint}</span>${m.step && html`<button class="btn ghost sm" style="padding:0 6px" onClick=${() => goTo(m.step - 1)}>إكمال</button>`}</div>`)}</div></div></div>`
-          : html`<div class="notice ok" style="margin-top:14px"><${Icon} name="check" />كل المعلومات الأساسية مكتملة.</div>`}`}
-    </div>
+    <${Field} label="ملاحظات أخرى" optional hint="أي شيء تريد أن يراعيه العرض، يظهر ضمن «فهمنا للمشروع».">
+      <${TextArea} value=${pr.requirements} onInput=${(v) => set('preferences', 'requirements', v)} minRows=${2} placeholder="مثال: التسليم قبل رمضان، التركيز على مدينة الرياض…" />
+    </${Field}>
   </div>`;
 }

@@ -11,6 +11,15 @@ const SECTION_ICON = {
   risks: 'alert', budget: 'briefcase', past_projects: 'folder', conclusion: 'flag',
 };
 
+// The four proposal designs. Logo colours per surface; the rest of each design lives in document.css.
+export const DESIGNS = {
+  ahdaf: { name: 'أهداف الكلاسيكي', note: 'غلاف بنفسجي وصفحات بيضاء ببطاقات ليلكية، بأسلوب عروض أهداف.', cover: '#fff', page: '#4C0192' },
+  night: { name: 'الليلي الفاخر', note: 'صفحات داكنة وتفاصيل ليلكية؛ للعلامات الفاخرة والفعاليات المسائية.', cover: '#fff', page: '#fff' },
+  bold: { name: 'العصري الجريء', note: 'غلاف مقسوم، وشريط عناوين بنفسجي، وبطاقات بإطار؛ حضور قوي.', cover: '#fff', page: '#fff' },
+  minimal: { name: 'الأبيض البسيط', note: 'مساحات بيضاء وخطوط رفيعة؛ أنيق ومناسب للجهات الرسمية.', cover: '#4C0192', page: '#4C0192' },
+};
+const designOf = (doc) => (DESIGNS[doc?.theme] ? doc.theme : 'ahdaf');
+
 let fontsReady = null;
 export function ensureFonts() {
   if (!fontsReady) {
@@ -57,7 +66,7 @@ function coverPage(doc, ctx) {
   return el(`<section class="pg pg--cover" data-kind="cover">${photo}
     ${markSVG('#fff', ctx.layout === 'portrait' ? 520 : 600, 'deco-mark').replace('<svg ', '<svg style="left:-90px;bottom:-150px" ')}${waves()}
     <div class="cover-in">
-      <div class="cover-top">${logoSVG('#fff', 46)}${clientLogo}</div>
+      <div class="cover-top">${logoSVG(ctx.logoCover, 46)}${clientLogo}</div>
       <div class="cover-main"><span class="cover-kicker">${esc(c.kicker || 'عرض فني')}</span><h1>${rich(c.title)}</h1>${c.subtitle ? `<p>${rich(c.subtitle)}</p>` : ''}</div>
       <div class="cover-foot">
         <div><span>مقدم إلى</span><b>${rich(c.client)}</b></div>
@@ -75,7 +84,7 @@ function dividerPage(section, num, ctx) {
   return el(`<section class="pg pg--divider" data-kind="divider" data-section="${esc(section.id)}">${photo}
     ${section.image ? '' : markSVG('#fff', 560, 'deco-mark').replace('<svg ', `<svg style="${markPos}" `)}
     ${waves()}
-    <div class="div-logo">${logoSVG('#fff', 30)}</div>
+    <div class="div-logo">${logoSVG(ctx.logoCover, 30)}</div>
     <div class="div-in"><span class="div-num">${num}</span><h2>${rich(section.title)}</h2>${section.subtitle ? `<p>${rich(section.subtitle)}</p>` : ''}</div>
   </section>`);
 }
@@ -84,7 +93,7 @@ function closingPage(ctx) {
   const s = ctx.settings || {};
   const contacts = [s.website, s.email, s.phone].filter(Boolean).map((x) => `<span>${esc(x)}</span>`).join('');
   return el(`<section class="pg pg--closing" data-kind="closing">${markSVG('#fff', 640, 'deco-mark').replace('<svg ', '<svg style="right:-160px;top:-180px" ')}${waves()}
-    <div class="close-in">${logoSVG('#fff', 64)}<div class="tag">${esc(s.tagline || 'نربط الإبداع بالهدف')}</div><div class="bar"></div>
+    <div class="close-in">${logoSVG(ctx.logoCover, 64)}<div class="tag">${esc(s.tagline || 'نربط الإبداع بالهدف')}</div><div class="bar"></div>
       <h2>شكرًا لكم</h2><p>${rich(ctx.closingLine || '')}</p>
       <div class="close-contacts">${contacts}${s.address ? `<span>${esc(s.address)}</span>` : ''}</div></div></section>`);
 }
@@ -96,7 +105,7 @@ function contentPage(ctx, section, num, first) {
     : `<div class="pg-title cont"><h2>${rich(section.title)}<span>(تابع)</span></h2></div>`;
   const airy = ['intro', 'conclusion'].includes(section.type) ? markSVG('#4C0192', 300, 'pg-deco') : '';
   const page = el(`<section class="pg pg--content ${ctx.tight ? 'tight' : ''}" data-kind="content" data-section="${esc(section.id)}">${airy}
-    <header class="pg-head">${titleHtml}<div class="pg-brand">${clientLogo}${logoSVG('#4C0192', 30)}</div></header>
+    <header class="pg-head">${titleHtml}<div class="pg-brand">${clientLogo}${logoSVG(ctx.logoPage, 30)}</div></header>
     <div class="pg-body"></div>
     <footer class="pg-foot"><span>${esc(ctx.footer)}</span><span class="num"></span></footer></section>`);
   return page;
@@ -172,7 +181,8 @@ function flowSectionOnce(host, ctx, section, num) {
         if (ov) break;
         fit = k;
       }
-      if (fit >= 1) {
+      const minKeep = empty ? 1 : Math.min(3, Math.ceil(n / 3)); // don't leave a stub of a short table/list behind
+      if (fit >= minKeep) {
         body.appendChild(el(`<div class="blk" data-block="${esc(block.id || '')}">${renderBlock(sliceBlock(block, 0, fit), ctx, cont)}</div>`));
         newPage();
         place(sliceBlock(block, fit, n), true, depth + 1);
@@ -226,8 +236,10 @@ export async function renderDocument(host, proposal, settings, options = {}) {
   const imgs = [doc.cover?.image, doc.cover?.client_logo, ...sections.flatMap((s) => [s.image, ...(s.blocks || []).filter((b) => b.type === 'image').map((b) => b.src)])];
   await preloadImages(imgs);
 
+  const design = designOf(doc);
   const ctx = {
     layout, settings: settings || {}, number: proposal.number,
+    logoCover: DESIGNS[design].cover, logoPage: DESIGNS[design].page,
     clientLogo: doc.cover?.client_logo || null,
     footer: `عرض فني — ${(doc.cover?.title || '').replace(/\[\[|\]\]/g, '')}`,
     closingLine: `نتطلع إلى العمل مع ${(doc.cover?.client || '').replace(/\[\[|\]\]/g, '')} على مشروع «${(doc.cover?.title || '').replace(/\[\[|\]\]/g, '')}».`,
@@ -237,6 +249,7 @@ export async function renderDocument(host, proposal, settings, options = {}) {
   const root = document.createElement('div');
   root.className = `doc ${options.mode === 'print' ? 'print' : 'screen'} ${options.clean ? 'print-clean' : ''}`;
   root.dataset.layout = layout;
+  root.dataset.theme = design;
   root.style.visibility = 'hidden';
   host.appendChild(root);
 
@@ -261,7 +274,7 @@ export async function renderDocument(host, proposal, settings, options = {}) {
     flowSection(root, ctx, section, num);
   });
 
-  if (!only) root.appendChild(closingPage(ctx));
+  if (!only && !options.noClosing) root.appendChild(closingPage(ctx));
 
   // page numbers (cover and closing pages carry none)
   [...root.children].forEach((pg, idx) => {

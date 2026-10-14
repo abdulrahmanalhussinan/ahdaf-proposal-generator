@@ -20,7 +20,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 @asynccontextmanager
 async def lifespan(_app):
-    ensure_seeded(with_demo=True)
+    ensure_seeded()
     yield
 
 

@@ -54,14 +54,48 @@ def test_no_invented_numbers(ptype, library, settings):
     assert not offenders, offenders
 
 
-def test_missing_audience_is_left_fillable_not_invented(library, settings):
+def test_missing_audience_is_proposed_from_the_sector(library, settings):
     out = engine.generate(make_inputs(), library, settings, seed=1)
-    fields = [m["field"] for m in out["meta"]["missing"]]
-    assert "project.audience" in fields
+    assert out["meta"]["missing"] == []
+    assert "الجمهور المستهدف" in out["meta"]["suggested"]
     und = next(s for s in out["doc"]["sections"] if s["type"] == "understanding")
     cards = next(b for b in und["blocks"] if b["type"] == "cards")
-    audience = next(c for c in cards["items"] if c["title"] == "الجمهور المستهدف")
-    assert audience["text"].startswith("[[")
+    audience = next(c for c in cards["items"] if c["title"].startswith("الجمهور المستهدف"))
+    assert "المسافرون" in audience["text"] and "[[" not in audience["text"]
+
+
+def test_system_proposes_creative_sections_from_surface_inputs(library, settings):
+    minimal = {"client": {"name": "شركة النموذج"}, "project": {"name": "حساب تيك توك", "type": "social_media"},
+               "preferences": {}}
+    doc = engine.generate(minimal, library, settings, seed=3)["doc"]
+    types = [s["type"] for s in doc["sections"]]
+    assert {"idea", "activations", "content_plan"} <= set(types)
+    idea = next(s for s in doc["sections"] if s["type"] == "idea")
+    assert any(b["type"] == "callout" and b["label"] == "الرسالة الأساسية" for b in idea["blocks"])
+    acts = next(b for s in doc["sections"] if s["type"] == "activations" for b in s["blocks"] if b["type"] == "cards")
+    assert len(acts["items"]) >= 4
+    week = next(b for s in doc["sections"] if s["type"] == "content_plan" for b in s["blocks"] if b["type"] == "table")
+    assert len(week["rows"]) == 7
+    assert "[[" not in json.dumps(doc, ensure_ascii=False)
+
+
+def test_ideas_differ_by_sector_and_regenerate_offers_another_concept(library, settings):
+    car = engine.generate(make_inputs(), library, settings, seed=3)["doc"]
+    food = engine.generate(make_inputs(client={"name": "مطعم", "sector": "food_beverage"}), library, settings, seed=3)["doc"]
+    lead = lambda d: next(b["text"] for s in d["sections"] if s["type"] == "idea" for b in s["blocks"] if b["type"] == "lead")
+    assert lead(car) != lead(food)
+    idea = next(s for s in car["sections"] if s["type"] == "idea")
+    again = engine.regenerate_section(make_inputs(), car, idea["id"], library, settings)
+    assert next(b["text"] for b in again["blocks"] if b["type"] == "lead") != lead(car)
+
+
+def test_other_fields_are_used(library, settings):
+    inputs = make_inputs(project={"type": "other", "type_other": "تنظيم رحلة تعريفية للإعلاميين", "platforms_other": "ثريدز"},
+                         services={"other": "تصميم كتيب الرحلة"})
+    out = engine.generate(inputs, library, settings, seed=2)
+    assert out["meta"]["type_label"] == "تنظيم رحلة تعريفية للإعلاميين"
+    assert "تصميم كتيب الرحلة" in out["meta"]["service_labels"]
+    assert "ثريدز" in out["meta"]["analysis"]["platforms"]
 
 
 def test_objective_numbers_become_targets(library, settings):
@@ -207,8 +241,11 @@ def test_ai_rewrite_guards_against_invented_facts(library, settings, monkeypatch
     doc = ai.enhance_document(json.loads(json.dumps(out["doc"])), inputs, out["meta"])
     assert "250%" not in json.dumps(doc, ensure_ascii=False)
 
+    with_field = json.loads(json.dumps(out["doc"]))
+    intro = next(sec for sec in with_field["sections"] if sec["type"] == "intro")
+    intro["blocks"][0]["text"] += " [[حدد الجمهور المستهدف]]"
     ai.set_client(FakeClient(lambda t: re.sub(r"\[\[[^\]]+\]\]", "الشباب", t)))  # drops a placeholder -> rejected
-    doc = ai.enhance_document(json.loads(json.dumps(out["doc"])), inputs, out["meta"])
+    doc = ai.enhance_document(with_field, inputs, out["meta"])
     assert "[[حدد الجمهور المستهدف" in json.dumps(doc, ensure_ascii=False)
 
     ai.set_client(FakeClient(lambda t: "صياغة محسّنة: " + t))  # valid rewrite -> applied
@@ -218,3 +255,15 @@ def test_ai_rewrite_guards_against_invented_facts(library, settings, monkeypatch
     about = next(s for s in doc["sections"] if s["type"] == "about")
     assert "صياغة محسّنة" not in json.dumps(about, ensure_ascii=False)  # official copy untouched
     ai.set_client(None)
+
+
+@pytest.mark.parametrize("design", ["ahdaf", "night", "bold", "minimal"])
+def test_every_design_exports_to_powerpoint(design, library, settings):
+    import io
+    import zipfile
+    from app.exporters.pptx_export import build_pptx
+    inputs = make_inputs(preferences={"design": design})
+    doc = engine.generate(inputs, library, settings, seed=4)["doc"]
+    assert doc["theme"] == design
+    data = build_pptx({"doc": doc, "number": "AHD-T"}, settings)
+    assert len([n for n in zipfile.ZipFile(io.BytesIO(data)).namelist() if n.startswith("ppt/slides/slide")]) > 15

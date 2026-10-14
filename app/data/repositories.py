@@ -89,6 +89,11 @@ class ClientRepo:
             conn.execute("UPDATE proposals SET client_id = NULL WHERE client_id = ?", (client_id,))
             conn.execute("DELETE FROM clients WHERE id = ?", (client_id,))
 
+    def delete_demo(self) -> None:
+        with transaction() as conn:
+            conn.execute("UPDATE proposals SET client_id = NULL WHERE client_id IN (SELECT id FROM clients WHERE is_demo = 1)")
+            conn.execute("DELETE FROM clients WHERE is_demo = 1")
+
     def upsert_by_name(self, name: str, sector: str | None = None, extra: dict | None = None) -> dict:
         existing = self.find_by_name(name)
         payload = {"name": name, "sector": sector, **(extra or {})}
@@ -190,6 +195,11 @@ class ProposalRepo:
         with transaction() as conn:
             conn.execute("DELETE FROM proposal_revisions WHERE proposal_id = ?", (proposal_id,))
             conn.execute("DELETE FROM proposals WHERE id = ?", (proposal_id,))
+
+    def delete_demo(self) -> None:
+        with transaction() as conn:
+            conn.execute("DELETE FROM proposal_revisions WHERE proposal_id IN (SELECT id FROM proposals WHERE is_demo = 1)")
+            conn.execute("DELETE FROM proposals WHERE is_demo = 1")
 
     def years(self) -> list[str]:
         rows = get_connection().execute(
@@ -306,6 +316,10 @@ class LibraryRepo:
         with transaction() as conn:
             conn.execute("DELETE FROM library_items WHERE id = ?", (item_id,))
 
+    def delete_demo(self) -> None:
+        with transaction() as conn:
+            conn.execute("DELETE FROM library_items WHERE is_demo = 1")
+
     def is_empty(self) -> bool:
         return get_connection().execute("SELECT COUNT(*) AS n FROM library_items").fetchone()["n"] == 0
 
@@ -354,6 +368,10 @@ class TemplateRepo:
     def delete(self, tid: str) -> None:
         with transaction() as conn:
             conn.execute("DELETE FROM templates WHERE id = ?", (tid,))
+
+    def delete_builtin(self) -> None:
+        with transaction() as conn:
+            conn.execute("DELETE FROM templates WHERE is_builtin = 1")
 
 
 # --------------------------------------------------------------------------- settings
