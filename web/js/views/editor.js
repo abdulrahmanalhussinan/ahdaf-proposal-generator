@@ -87,6 +87,7 @@ export function Editor({ params }) {
     const prev = section;
     try {
       const fresh = await api.post(`/api/proposals/${p.id}/sections/${section.id}/regenerate`, { tone: tone || null });
+      if (fresh._ai_error) { toast(`تعذر وصول Claude، فأُعيدت كتابة القسم بالمحرك الداخلي: ${fresh._ai_error}`, 'error'); delete fresh._ai_error; }
       setP((c) => ({ ...c, doc: { ...c.doc, sections: c.doc.sections.map((s) => (s.id === fresh.id ? fresh : s)) } }));
       setUndo({ id: fresh.id, prev });
       toast(`تمت إعادة صياغة «${fresh.title}»`);

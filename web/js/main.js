@@ -15,6 +15,7 @@ import { Settings } from './views/settings.js';
 import { Celebrities } from './views/celebrities.js';
 import { STATIC } from './lib/env.js';
 import { logoSVG } from './lib/brand.js';
+import { status as browserAi } from './lib/ai.js';
 
 const ROUTES = [
   ['/', Dashboard],
@@ -35,7 +36,7 @@ function App() {
   const { path, query } = useRoute();
   const meta = useStore((s) => s.meta);
   useEffect(() => {
-    api.get('/api/meta').then((m) => store.set({ meta: m })).catch((e) => store.set({ metaError: e.message }));
+    api.get('/api/meta').then((m) => store.set({ meta: STATIC ? { ...m, ai: browserAi() } : m })).catch((e) => store.set({ metaError: e.message }));
   }, []);
 
   let view = null;

@@ -8,8 +8,36 @@ export class ApiError extends Error {
   constructor(message, status) { super(message); this.status = status; }
 }
 
+// Browser edition: when the visitor saved a Claude key, generation and section rewrites are written by
+// Claude from this page (lib/ai.js) and handed to the in-browser backend as `ai_content`.
+async function staticRequest(method, url, body) {
+  const b = await localBackend();
+  let aiError = '';
+  if (method === 'POST' && body) {
+    const ai = await import('./ai.js');
+    const path = new URL(url, location.href).pathname;
+    const whole = /\/api\/proposals\/(generate|[^/]+\/regenerate)$/.test(path);
+    const sec = path.match(/\/api\/proposals\/([^/]+)\/sections\/([^/]+)\/regenerate$/);
+    if (ai.getKey() && (whole || sec)) {
+      try {
+        if (whole) body = { ...body, ai_content: await ai.writeProposal(b.request, body.inputs) };
+        else {
+          const c = await ai.writeSection(b.request, sec[1], sec[2], body.tone);
+          if (c) body = { ...body, ai_content: c };
+        }
+      } catch (e) { aiError = e.message || 'تعذر الوصول إلى Claude'; }
+    }
+  }
+  const out = await b.request(method, url, body);
+  if (aiError && out && typeof out === 'object') {
+    if (out.doc) out.doc.ai = { ...(out.doc.ai || {}), error: aiError };
+    else out._ai_error = aiError;
+  }
+  return out;
+}
+
 async function request(method, url, body, opts = {}) {
-  if (STATIC) return (await localBackend()).request(method, url, body === undefined ? null : body);
+  if (STATIC) return staticRequest(method, url, body === undefined ? null : body);
   const init = { method, headers: { Accept: 'application/json' } };
   if (body instanceof FormData) init.body = body;
   else if (body !== undefined) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(body); }

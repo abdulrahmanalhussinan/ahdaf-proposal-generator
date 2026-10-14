@@ -18,6 +18,16 @@ OUT = Path(sys.argv[2] if len(sys.argv) > 2 else "e2e-static-output")
 OUT.mkdir(parents=True, exist_ok=True)
 CLIENT = f"متاجر اختبار المتصفح {int(time.time()) % 10000}"
 errors: list[str] = []
+CORS = {"access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "POST, OPTIONS"}
+FIXTURE = {
+    "cover_subtitle": "حملة تفتح فروع الرياض",
+    "idea": {"subtitle": "الفكرة", "name": "مشوار الرياض", "idea": "فكرة تُبنى حول مشاوير الرياض اليومية.", "message": "الرسالة.",
+             "slogans": ["أ", "ب", "ج"], "why": "لأن الجمهور في الرياض.", "execution": ["خطوة", "خطوة ثانية"]},
+    "activations": {"subtitle": "", "intro": "أفكار.", "items": [{"title": "فكرة 1", "text": "نص. حققنا 250% نموًا."}, {"title": "فكرة 2", "text": "نص."}]},
+    "intro": {"subtitle": "", "lead": "افتتاحية مشوار الرياض.", "paragraphs": []},
+    "understanding": {"subtitle": "", "paragraphs": ["فهم."], "cards": [{"title": "الجمهور", "text": "شباب الرياض."}], "insight": "خلاصة."},
+    "conclusion": {"subtitle": "", "lead": "خاتمة.", "paragraph": "", "next_steps": [{"title": "اجتماع", "text": "نبدأ."}]},
+}
 results: list[tuple[str, bool, str]] = []
 
 
@@ -99,6 +109,54 @@ with sync_playwright() as pw:
     page.wait_for_selector(".ed-nav .sec-item")
     titles = page.locator(".ed-nav .sec-item .t").all_inner_texts()
     check("edited title persisted", "فهمنا لموسم الجمعة البيضاء" in titles)
+
+    # ---- Claude in the browser: the visitor's key, the Messages API mocked (no real calls, no cost)
+    seen = []
+
+    def fake_claude(route):
+        req = route.request
+        if req.method == "OPTIONS":
+            return route.fulfill(status=204, headers=CORS)
+        body = json.loads(req.post_data)
+        seen.append({"key": req.headers.get("x-api-key"), "model": body["model"],
+                     "sections": list(body.get("output_config", {}).get("format", {}).get("schema", {}).get("properties", {}))})
+        props = body["output_config"]["format"]["schema"]["properties"]
+        answer = {k: v for k, v in FIXTURE.items() if k in props}
+        events = [{"type": "message_start", "message": {"id": "m", "content": []}},
+                  {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}},
+                  {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": json.dumps(answer, ensure_ascii=False)}},
+                  {"type": "message_delta", "delta": {"stop_reason": "end_turn"}}, {"type": "message_stop"}]
+        sse = "".join(f"event: {e['type']}\ndata: {json.dumps(e, ensure_ascii=False)}\n\n" for e in events)
+        route.fulfill(status=200, headers={**CORS, "content-type": "text/event-stream; charset=utf-8"}, body=sse.encode("utf-8"))
+
+    page.route("https://api.anthropic.com/**", fake_claude)
+    page.goto(BASE + "#/settings", wait_until="domcontentloaded")
+    boot(page)
+    page.get_by_placeholder("sk-ant-...").fill("sk-ant-test-key")
+    page.get_by_role("button", name="حفظ واختبار المفتاح").click()
+    page.wait_for_selector("text=Claude يكتب العروض في هذا المتصفح", timeout=15_000)
+    check("browser key saved and tested", seen and seen[-1]["key"] == "sk-ant-test-key", str(seen[-1:]))
+    page.goto(BASE + "#/new", wait_until="domcontentloaded")
+    page.wait_for_selector(".design-opt .pg")
+    if page.get_by_text("استُكملت المسودة").count():
+        page.get_by_role("button", name="البدء من جديد").click()
+        page.get_by_role("button", name="مسح المدخلات").click()
+    page.get_by_role("button", name="التالي").click()
+    page.locator("#c-name").fill("مقاهي اختبار الذكاء")
+    page.locator("#c-sector").select_option("food_beverage")
+    page.locator("#p-name").fill("إطلاق فروع الرياض")
+    page.get_by_role("radio", name="حملة تسويقية متكاملة").click()
+    page.get_by_placeholder("مثال: نركز على الرياض").fill("نركز على الرياض")
+    page.get_by_role("button", name="ولّد الآن بالاقتراحات التلقائية").click()
+    page.wait_for_url("**/edit", timeout=90_000)
+    page.wait_for_selector(".ed-nav .sec-item")
+    titles = page.locator(".ed-nav .sec-item .t").all_inner_texts()
+    pid2 = page.url.split("#/proposals/")[1].split("/")[0]
+    saved = json.loads(page.evaluate(f"(async () => JSON.stringify(await (await import('./js/lib/api.js')).api.get('/api/proposals/{pid2}')))()"))
+    text = json.dumps(saved["doc"], ensure_ascii=False)
+    check("Claude wrote the proposal in two stages", len(seen) >= 3 and seen[1]["sections"][:3] == ["cover_subtitle", "idea", "activations"], str([x["sections"] for x in seen]))
+    check("Claude's content applied with guards", "مشوار الرياض" in text and "250%" not in text and "idea" in saved["doc"]["ai"]["sections"], str(saved["doc"].get("ai")))
+    page.screenshot(path=str(OUT / "04-ai-editor.png"))
 
     m = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True, device_scale_factor=2)
     mp = m.new_page()

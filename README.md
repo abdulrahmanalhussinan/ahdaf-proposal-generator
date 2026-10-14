@@ -113,7 +113,9 @@ python tests/e2e_test.py e2e-output         # رحلة المستخدم كامل
 ```
 
 ## نسخة الموقع (GitHub Pages)
-`python scripts/publish_pages.py` يبني نسخة تعمل كاملة داخل المتصفح (Pyodide) وينشرها على https://abdulrahmanalhussinan.github.io/ahdaf-proposal-generator/ . العروض فيها تُحفظ في متصفح كل زائر فقط، وتصدير PDF يتم من نافذة الطباعة، وتصدير PowerPoint متاح في نسخة الخادم.
+`python scripts/publish_pages.py` يبني نسخة تعمل كاملة داخل المتصفح (Pyodide) وينشرها على https://abdulrahmanalhussinan.github.io/ahdaf-proposal-generator/ .
+- **الكتابة بـ Claude في الموقع:** من «الإعدادات» يضع كل مستخدم مفتاح Claude API الخاص به (من console.anthropic.com). يُحفظ المفتاح في متصفحه فقط، ويُرسل مباشرة إلى Claude ولا يمر بأي خادم، ثم يكتب Claude العرض بنفس طريقة نسخة الجهاز ونفس الحماية. بدون مفتاح يكتب المحرك الداخلي.
+- العروض وقائمة المشاهير تُحفظ في متصفح كل مستخدم. تصدير PDF من نافذة الطباعة، وPowerPoint من نسخة الجهاز.
 
 ## البيانات
 يبدأ النظام فارغًا بلا عروض أو عملاء تجريبيين.

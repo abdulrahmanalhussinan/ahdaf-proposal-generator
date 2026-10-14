@@ -51,10 +51,9 @@ _ahdaf_browser.init()
 const extras = {};
 // Readers for uploaded files load on first use only.
 function packagesFor(path) {
-  if (path.endsWith('/api/celebrities/import')) return extras.xlsx || (extras.xlsx = py.loadPackage(['openpyxl']));
-  if (path.endsWith('/api/documents')) {
-    return extras.pdf || (extras.pdf = py.loadPackage(['micropip']).then(() => py.pyimport('micropip').install('pypdf')));
-  }
+  const pip = (name) => py.loadPackage(['micropip']).then(() => py.pyimport('micropip').install(name));
+  if (path.endsWith('/api/celebrities/import')) return extras.xlsx || (extras.xlsx = pip('openpyxl'));
+  if (path.endsWith('/api/documents')) return extras.pdf || (extras.pdf = pip('pypdf'));
   return null;
 }
 
