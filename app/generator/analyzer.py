@@ -11,6 +11,7 @@ from datetime import date, datetime, timedelta
 from app.core import arabic as ar
 from app.generator.knowledge.ideas import SEGMENTS
 from app.generator.knowledge.objectives import DEFAULTS_BY_TYPE, OBJECTIVES
+from app.generator.knowledge.places import mentioned_cities
 from app.generator.knowledge.platforms import PLATFORM_ORDER, PLATFORMS
 from app.generator.knowledge.project_types import PROJECT_TYPES
 from app.generator.knowledge.sectors import SECTORS
@@ -86,6 +87,7 @@ class Analysis:
     segments: list[str] = field(default_factory=list)
     extra_platforms: list[str] = field(default_factory=list)
     suggested: list[str] = field(default_factory=list)  # what the system proposed on its own
+    cities: list[str] = field(default_factory=list)  # cities the brief focuses on
 
     # ------------------------------------------------------------------ derived helpers
     @property
@@ -389,6 +391,7 @@ def analyze(inputs: dict, library: dict[str, list[dict]]) -> Analysis:
         show_budget=bool(goals_in.get("show_budget")), tone=prefs.get("tone") if prefs.get("tone") in TONES else "corporate",
         detail=prefs.get("detail") if prefs.get("detail") in DETAILS else "medium", prefs=prefs, event_noun=event_noun,
         audience_suggested=audience_suggested, segments=segments, extra_platforms=extra_platforms,
+        cities=mentioned_cities(" ".join([project, description, prefs.get("requirements") or "", project_in.get("location") or ""])),
     )
 
     # ---- only the essentials are required; everything else the system proposes and lists for review

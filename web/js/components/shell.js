@@ -9,6 +9,7 @@ const NAV = [
   { to: '/proposals', label: 'العروض السابقة', icon: 'folder' },
   { to: '/templates', label: 'القوالب', icon: 'layout' },
   { to: '/clients', label: 'العملاء', icon: 'users' },
+  { to: '/celebrities', label: 'المشاهير', icon: 'star' },
   { to: '/library', label: 'مكتبة المحتوى', icon: 'book' },
   { to: '/settings', label: 'الإعدادات', icon: 'settings' },
 ];
@@ -34,7 +35,7 @@ export function Shell({ path, children, bare }) {
       <nav>${NAV.map((n) => html`<a class=${`nav ${isActive(n, path) ? 'on' : ''}`} href=${hrefOf(n.to)} aria-current=${isActive(n, path) ? 'page' : null} onClick=${(e) => link(e, n.to)}><${Icon} name=${n.icon} />${n.label}</a>`)}</nav>
       <span class="stairs" dangerouslySetInnerHTML=${{ __html: markSVG('#fff', 230) }}></span>
       <div class="foot">
-        <span class="ai"><span class=${`dot ${ai?.enabled ? 'on' : ''}`}></span>${ai?.enabled ? 'الكتابة بالذكاء الاصطناعي مفعّلة' : 'محرك الكتابة الداخلي'}</span>
+        <span class="ai"><span class=${`dot ${ai?.enabled ? 'on' : ''}`}></span>${ai?.enabled ? 'Claude يكتب العروض' : 'محرك الكتابة الداخلي'}</span>
         ${STATIC && html`<span title="نسخة تعمل بالكامل داخل متصفحك، والعروض تُحفظ على هذا الجهاز فقط">نسخة المتصفح · العروض محفوظة على جهازك</span>`}
         <span>أهداف للخدمات التسويقية</span>
       </div>

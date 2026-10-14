@@ -22,12 +22,12 @@ const DURATIONS = [
 ];
 
 const empty = () => ({
-  client: { name: '', sector: '', logo: null },
+  client: { name: '', sector: '', logo: null, profile: null },
   project: { name: '', type: '', type_other: '', description: '', audience: [], audience_other: '', platforms: [], platforms_other: '', event_date: '' },
   services: { selected: [], other: '' },
   timeline: { duration_value: '', duration_unit: 'month', start_date: '' },
   goals: { objective_keys: [], objectives: '' },
-  preferences: { design: 'ahdaf', tone: 'corporate', tone_other: '', detail: 'medium', layout: 'landscape', include_about: true, dividers: true, requirements: '' },
+  preferences: { design: 'ahdaf', tone: 'corporate', tone_other: '', detail: 'medium', layout: 'landscape', include_about: true, dividers: true, requirements: '', celebrities: 'auto', extra_sections: [] },
 });
 
 function merge(base, extra) {
@@ -142,8 +142,10 @@ export function Wizard({ params, query }) {
       if (!ok) return;
     }
     const started = Date.now();
-    setGen({ stage: 0 });
-    const ticker = setInterval(() => setGen((g) => (g ? { stage: Math.min(g.stage + 1, 4) } : g)), 520);
+    const ai = !!meta?.ai?.enabled;
+    setGen({ stage: 0, ai, sec: 0 });
+    // Claude takes minutes; the rules engine a moment. The steps move at a matching pace.
+    const ticker = setInterval(() => setGen((g) => (g ? { ...g, sec: Math.round((Date.now() - started) / 1000), stage: Math.min(Math.floor((Date.now() - started) / (ai ? 45000 : 520)), 4) } : g)), ai ? 1000 : 260);
     try {
       let target;
       if (editId) {
@@ -153,8 +155,12 @@ export function Wizard({ params, query }) {
         target = await api.post('/api/proposals/generate', { inputs: data });
         try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
       }
-      const wait = Math.max(0, 2400 - (Date.now() - started));
-      setTimeout(() => { clearInterval(ticker); setGen(null); navigate(`/proposals/${target.id}/edit`); toast('تم إنشاء العرض الفني'); }, wait);
+      const wait = ai ? 0 : Math.max(0, 2400 - (Date.now() - started));
+      setTimeout(() => {
+        clearInterval(ticker); setGen(null); navigate(`/proposals/${target.id}/edit`);
+        if (target.doc?.ai?.error) toast(`تعذر وصول Claude، فكُتب العرض بالمحرك الداخلي: ${target.doc.ai.error}`, 'error');
+        else toast('تم إنشاء العرض الفني');
+      }, wait);
     } catch (e) {
       clearInterval(ticker);
       setGen(null);
@@ -194,15 +200,19 @@ export function Wizard({ params, query }) {
         </div>
       </section>
     </div>
-    ${gen && html`<${Generating} stage=${gen.stage} />`}
+    ${gen && html`<${Generating} ...${gen} />`}
   </div>`;
 }
 
-function Generating({ stage }) {
-  const steps = ['قراءة المشروع والقطاع', 'ابتكار الفكرة والرسالة', 'اقتراح الأفكار التفعيلية والمحتوى', 'بناء المنهجية والجدول والفريق', 'تنسيق الصفحات بالتصميم المختار'];
+function Generating({ stage, ai, sec }) {
+  const steps = ai
+    ? ['قراءة المشروع وفكرتك والملف التعريفي', 'التفكير في الفكرة الإبداعية والتفعيلات', 'كتابة الفهم والأهداف والمشاهير والمحتوى', 'بناء المراحل والمخرجات والجدول', 'تنسيق الصفحات بالتصميم المختار']
+    : ['قراءة المشروع والقطاع', 'ابتكار الفكرة والرسالة', 'اقتراح الأفكار التفعيلية والمحتوى', 'بناء المنهجية والجدول', 'تنسيق الصفحات بالتصميم المختار'];
+  const mm = `${Math.floor((sec || 0) / 60)}:${String((sec || 0) % 60).padStart(2, '0')}`;
   return html`<div class="gen-overlay" role="alert" aria-busy="true"><div class="gen-box">
     <div class="gen-stairs" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
-    <h2>نجهّز العرض الفني</h2><p>نقرأ المشروع ونقترح الفكرة والخطة كاملة.</p>
+    <h2>${ai ? 'Claude يكتب العرض الفني' : 'نجهّز العرض الفني'}</h2>
+    <p>${ai ? html`يفكر في مشروعك ويبني عليه عرضًا كاملًا. يستغرق عادة من 3 إلى 6 دقائق، اترك الصفحة مفتوحة. <b class="ltr">${mm}</b>` : 'نقرأ المشروع ونقترح الفكرة والخطة كاملة.'}</p>
     <ul class="gen-steps">${steps.map((s, i) => html`<li class=${i < stage ? 'done' : i === stage ? 'now' : ''}><span class="s">${i < stage ? html`<${Icon} name="check" size=${13} />` : ''}</span>${s}</li>`)}</ul>
   </div></div>`;
 }
@@ -241,11 +251,31 @@ function StepProject({ data, set, meta, lib, errors, setData }) {
       ${p.type === 'other' && html`<input class="input" style="margin-top:8px" value=${p.type_other} onInput=${(e) => set('project', 'type_other', e.target.value)} placeholder="اكتب نوع المشروع، مثل: رحلة تعريفية للإعلاميين" />`}
       ${errors.type && html`<span class="err">${errors.type}</span>`}
     </div>
-    <${Field} label="وصف مختصر" optional hint="سطر أو سطران يكفيان. النظام يقترح الفكرة والأهداف والجمهور والخطة.">
-      <${TextArea} value=${p.description} onInput=${(v) => set('project', 'description', v)} minRows=${2} placeholder="مثال: نبي نرفع حضور الشركة على تيك توك ونزيد الحجوزات." />
+    <${Field} label="فكرتك أو توجيهك" optional hint="اكتبها بكلامك ولو كلمتين. النظام يبني عليها ويطورها ويقترح الباقي، ولا ينسخها كما هي في العرض.">
+      <${TextArea} value=${p.description} onInput=${(v) => set('project', 'description', v)} minRows=${3} placeholder="مثال: نركز على الرياض ونجيب مشاهير، ونبي شي يخلي الناس تزور الفروع." />
+    </${Field}>
+    <${Field} label="الملف التعريفي للعميل" optional hint="PDF أو Word أو PowerPoint. يقرأه النظام ويفهم منه العميل وخدماته وجمهوره.">
+      <${ProfilePicker} value=${c.profile} onChange=${(v) => set('client', 'profile', v)} />
     </${Field}>
     <${Field} label="شعار العميل" optional><${ImagePicker} value=${c.logo} onChange=${(v) => set('client', 'logo', v)} onUpload=${api.upload} label="رفع الشعار" /></${Field}>
   </div>`;
+}
+
+function ProfilePicker({ value, onChange }) {
+  const [busy, setBusy] = useState(false);
+  const pick = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    setBusy(true);
+    try { onChange(await api.uploadFile('/api/documents', file)); toast('تمت قراءة الملف التعريفي'); } catch (err) { toastError(err); } finally { setBusy(false); }
+  };
+  if (value) {
+    return html`<div class="notice ok" style="align-items:center"><${Icon} name="file" /><span style="flex:1"><b>${value.filename}</b> · قُرئ منه ${Number(value.chars || 0).toLocaleString('en-US')} حرف${value.scanned ? ' (أغلب الملف صور، ارفع نسخة نصية إن أمكن)' : ''}</span>
+      <button class="btn ghost sm" onClick=${() => onChange(null)}><${Icon} name="trash" size=${15} />إزالة</button></div>`;
+  }
+  return html`<label class="btn soft" style="width:max-content;cursor:pointer">${busy ? html`<${Spinner} />` : html`<${Icon} name="upload" />`}${busy ? 'جارٍ قراءة الملف…' : 'رفع الملف التعريفي'}
+    <input type="file" accept=".pdf,.docx,.pptx,.txt" style="display:none" onChange=${pick} disabled=${busy} /></label>`;
 }
 
 function StepSuggest({ data, set, meta, lib }) {
@@ -300,7 +330,14 @@ function StepSuggest({ data, set, meta, lib }) {
       </${Field}>
       <div class="field"><span class="lbl">مستوى التفصيل</span><${Seg} value=${pr.detail} onChange=${(v) => set('preferences', 'detail', v)} options=${(meta?.details || []).map((d) => ({ value: d.key, label: d.label }))} /></div>
     </div>
-    <${Field} label="ملاحظات أخرى" optional hint="أي شيء تريد أن يراعيه العرض، يظهر ضمن «فهمنا للمشروع».">
+    <div class="row">
+      <div class="field"><span class="lbl">المشاهير</span>
+        <${Seg} value=${pr.celebrities || 'auto'} onChange=${(v) => set('preferences', 'celebrities', v)} options=${[{ value: 'auto', label: 'تلقائي' }, { value: 'yes', label: 'رشّح من قائمتي' }, { value: 'no', label: 'بدون' }]} />
+        <span class="hint">${meta?.celebrities ? `في قائمتك ${meta.celebrities} اسم. «تلقائي» يرشّح منها إذا كانت فكرتك أو نوع المشروع يحتاج مشاهير.` : 'ارفع شيت المشاهير من صفحة «المشاهير» ليرشّح منه النظام. لا يذكر أي اسم من خارج قائمتك.'}</span></div>
+      <div class="field"><span class="lbl">أقسام إضافية (غير مضافة افتراضيًا)</span>
+        <div class="chips">${(meta?.extra_sections || []).map((x) => { const on = (pr.extra_sections || []).includes(x.key); return html`<button type="button" class=${`chip ${on ? 'on' : ''}`} aria-pressed=${on} onClick=${() => set('preferences', 'extra_sections', on ? pr.extra_sections.filter((k) => k !== x.key) : [...(pr.extra_sections || []), x.key])}>${on ? html`<${Icon} name="check" size=${14} />` : null}${x.label}</button>`; })}</div></div>
+    </div>
+    <${Field} label="ملاحظات أخرى" optional hint="أي شيء تريد أن يراعيه العرض. النظام يبني عليها ولا ينسخها.">
       <${TextArea} value=${pr.requirements} onInput=${(v) => set('preferences', 'requirements', v)} minRows=${2} placeholder="مثال: التسليم قبل رمضان، التركيز على مدينة الرياض…" />
     </${Field}>
   </div>`;

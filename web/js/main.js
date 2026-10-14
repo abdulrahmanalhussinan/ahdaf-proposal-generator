@@ -12,6 +12,7 @@ import { Templates } from './views/templates.js';
 import { Clients } from './views/clients.js';
 import { Library } from './views/library.js';
 import { Settings } from './views/settings.js';
+import { Celebrities } from './views/celebrities.js';
 import { STATIC } from './lib/env.js';
 import { logoSVG } from './lib/brand.js';
 
@@ -27,6 +28,7 @@ const ROUTES = [
   ['/library', Library],
   ['/library/:kind', Library],
   ['/settings', Settings],
+  ['/celebrities', Celebrities],
 ];
 
 function App() {

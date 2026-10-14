@@ -48,9 +48,21 @@ _ahdaf_browser.init()
   return ready;
 }
 
+const extras = {};
+// Readers for uploaded files load on first use only.
+function packagesFor(path) {
+  if (path.endsWith('/api/celebrities/import')) return extras.xlsx || (extras.xlsx = py.loadPackage(['openpyxl']));
+  if (path.endsWith('/api/documents')) {
+    return extras.pdf || (extras.pdf = py.loadPackage(['micropip']).then(() => py.pyimport('micropip').install('pypdf')));
+  }
+  return null;
+}
+
 export async function request(method, url, body) {
   await boot();
   const u = new URL(url, location.href);
+  const need = method === 'POST' ? packagesFor(u.pathname) : null;
+  if (need) await need;
   const query = Object.fromEntries(u.searchParams.entries());
   const out = JSON.parse(browser.handle(method, u.pathname.replace(/^.*?(\/api\/)/, '/api/'), JSON.stringify(query), JSON.stringify(body ?? null)));
   if (method !== 'GET') persistSoon();

@@ -14,7 +14,7 @@ def test_meta_does_not_leak_secrets():
     assert r.status_code == 200
     body = r.text
     assert "sk-ant" not in body and "ANTHROPIC" not in body
-    assert {"provider", "enabled", "model"} == set(r.json()["ai"])
+    assert {"provider", "enabled", "model", "label"} == set(r.json()["ai"])
 
 
 def test_generate_requires_client_and_project_name():

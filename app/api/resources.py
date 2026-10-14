@@ -10,7 +10,9 @@ from app import config
 from app.core.schemas import ClientIn, LibraryItemIn, SettingsIn, TemplateIn
 from app.core.security import User, get_current_user
 from app.data import repositories as repo
-from app.services import catalog
+from app.services import catalog, files
+from app.services import celebrities as celebs
+from app.services import documents
 from app.services.catalog import LIBRARY_LABELS
 
 router = APIRouter(prefix="/api", tags=["resources"])
@@ -149,3 +151,43 @@ async def upload(file: UploadFile = File(...), user: User = Depends(get_current_
     stored = f"{uuid.uuid4().hex}{ext}"
     (config.UPLOAD_DIR / stored).write_bytes(data)
     return repo.uploads.create(file.filename or stored, file.content_type, len(data), stored)
+
+
+# ------------------------------------------------------------------ celebrities (the team's own list)
+@router.get("/celebrities")
+def celebrities_list(q: str = "", user: User = Depends(get_current_user)):
+    return celebs.overview(q)
+
+
+@router.post("/celebrities/import", status_code=201)
+async def celebrities_import(file: UploadFile = File(...), user: User = Depends(get_current_user)):
+    data = await file.read(files.MAX_SHEET_BYTES + 1)
+    try:
+        return celebs.import_file(file.filename or "شيت", data)
+    except files.FileError as exc:
+        raise HTTPException(status_code=415, detail=str(exc))
+
+
+@router.delete("/celebrities", status_code=204)
+def celebrities_clear(source: str = "", user: User = Depends(get_current_user)):
+    if source:
+        repo.celebrities.delete_source(source)
+    else:
+        repo.celebrities.clear()
+    return Response(status_code=204)
+
+
+@router.delete("/celebrities/{cid}", status_code=204)
+def celebrities_delete(cid: str, user: User = Depends(get_current_user)):
+    repo.celebrities.delete(cid)
+    return Response(status_code=204)
+
+
+# ------------------------------------------------------------------ reference documents (client profiles)
+@router.post("/documents", status_code=201)
+async def documents_upload(file: UploadFile = File(...), user: User = Depends(get_current_user)):
+    data = await file.read(files.MAX_DOC_BYTES + 1)
+    try:
+        return documents.store(file.filename or "ملف", data)
+    except files.FileError as exc:
+        raise HTTPException(status_code=415, detail=str(exc))

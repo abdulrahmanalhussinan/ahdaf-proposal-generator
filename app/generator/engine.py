@@ -24,14 +24,17 @@ from app.generator.knowledge.platforms import PLATFORMS
 from app.generator.knowledge.project_types import PROJECT_TYPES
 from app.generator.knowledge.services import CATEGORIES
 
-SECTION_ORDER = ["about", "intro", "understanding", "objectives", "idea", "activations", "content_plan",
+SECTION_ORDER = ["about", "intro", "understanding", "objectives", "idea", "activations", "celebrities", "content_plan",
                  "scope", "methodology", "deliverables",
                  "timeline", "team", "kpis", "governance", "assumptions", "risks", "budget", "past_projects",
                  "conclusion"]
+# Off unless asked for in the wizard (preferences.extra_sections): the team found them filler.
+OPTIONAL_SECTIONS = ("team", "governance", "assumptions", "risks")
 
 SECTION_TITLES = {
     "about": "عن أهداف", "intro": "المقدمة", "understanding": "فهمنا للمشروع", "objectives": "أهداف المشروع",
-    "idea": "الفكرة الإبداعية", "activations": "أفكار تفعيلية مقترحة", "content_plan": "محاور المحتوى وخطة النشر",
+    "idea": "الفكرة الإبداعية", "activations": "أفكار تفعيلية مقترحة", "celebrities": "المشاهير المقترحون",
+    "content_plan": "محاور المحتوى وخطة النشر",
     "scope": "نطاق العمل", "methodology": "منهجية وآلية التنفيذ", "deliverables": "المخرجات",
     "timeline": "الجدول الزمني", "team": "فريق العمل", "kpis": "مؤشرات الأداء", "governance": "الحوكمة وإدارة المشروع",
     "assumptions": "الافتراضات والمتطلبات", "risks": "المخاطر وآلية التعامل معها", "budget": "الإطار المالي",
@@ -39,12 +42,12 @@ SECTION_TITLES = {
 }
 SECTION_TITLES_EN = {
     "about": "About AHDAF", "intro": "Introduction", "understanding": "Our Understanding", "objectives": "Objectives",
-    "idea": "Creative Idea", "activations": "Activation Ideas", "content_plan": "Content Plan",
+    "idea": "Creative Idea", "activations": "Activation Ideas", "celebrities": "Suggested Talent", "content_plan": "Content Plan",
     "scope": "Scope of Work", "methodology": "Methodology", "deliverables": "Deliverables", "timeline": "Timeline",
     "team": "Project Team", "kpis": "KPIs", "governance": "Governance", "assumptions": "Assumptions",
     "risks": "Risk Management", "budget": "Budget", "past_projects": "Related Work", "conclusion": "Conclusion",
 }
-DIVIDER_SECTIONS = {"understanding", "idea", "scope", "timeline", "governance"}
+DIVIDER_SECTIONS = {"understanding", "idea", "scope", "timeline"}
 CONTENT_TYPES = {"social_media", "content", "campaign", "influencer", "digital_ads"}
 DESIGNS = ("ahdaf", "night", "bold", "minimal")
 
@@ -385,8 +388,6 @@ def build_understanding(w: Writer, rng, tone):
         first.append(w.choose(rng, P.UNDERSTANDING_SECTOR, tone, drivers=ar.join(drivers[:3])))
     if first:
         blocks.append(blk("paragraph", text=" ".join(first)))
-    if a.description:
-        blocks.append(blk("paragraph", text=w.choose(rng, P.UNDERSTANDING_REQUEST, tone)))
 
     cards = []
     challenges = w.shuffled(rng, a.ptype.get("challenges") or [])
@@ -400,6 +401,10 @@ def build_understanding(w: Writer, rng, tone):
     cards.append({"title": "الجمهور المستهدف المقترح" if a.audience_suggested else "الجمهور المستهدف",
                   "text": ar.sentence(ar.join(a.segments)) if a.audience_suggested else ar.sentence(a.audience),
                   "icon": "users"})
+    if a.cities:
+        city = ar.join(a.cities)
+        cards.append({"title": "التركيز الجغرافي", "icon": "pin",
+                      "text": f"يتركز التنفيذ والمحتوى في {city}: أماكن يعرفها الجمهور، ومناسبات المدينة، ولهجة قريبة منه، حتى يشعر أن المشروع يخصه."})
     if a.event_date or a.location:
         parts = []
         if a.event_date:
@@ -422,9 +427,6 @@ def build_understanding(w: Writer, rng, tone):
     if cons and a.detail != "brief":
         cards.append({"title": "اعتبارات تنظيمية", "text": ar.sentence(cons[0]), "icon": "shield"})
     blocks.append(blk("cards", items=cards[: caps["cards"]], columns=2 if len(cards[: caps["cards"]]) <= 4 else 3))
-
-    if a.special_requirements:
-        blocks.append(blk("list", title="متطلبات خاصة أكد عليها العميل", items=[ar.sentence(r) for r in a.special_requirements], style="check"))
 
     insight = w.choose(rng, P.INSIGHTS.get(a.type_key, P.INSIGHTS["other"]))
     blocks.append(blk("callout", label="الخلاصة", text=insight))
@@ -475,17 +477,23 @@ def build_scope(w: Writer, rng, tone):
     return blocks
 
 
-def build_methodology(w: Writer, rng, tone):
+def methodology_items(w: Writer, phases: list[dict], cap: int | None = None) -> list[dict]:
+    """Phase cards for scheduled phases (offset/days set by _schedule)."""
     a = w.a
-    phases = _schedule(w, _phases(w))
     items = []
     for p in phases:
-        acts = p["activities"][: w.caps["activities"]]
+        acts = p["activities"][: cap] if cap else list(p["activities"])
         item = {"title": p["name"], "goal": p.get("goal", ""), "activities": acts,
                 "period": _period_label(a, p["offset"], p["days"], p.get("recurring", False))}
-        if a.detail != "brief":
+        if a.detail != "brief" or not cap:
             item["outputs"] = p.get("outputs", [])
         items.append(item)
+    return items
+
+
+def build_methodology(w: Writer, rng, tone):
+    a = w.a
+    items = methodology_items(w, _schedule(w, _phases(w)), w.caps["activities"])
     blocks = [blk("paragraph", text=w.choose(rng, P.METHODOLOGY_INTRO, tone, phase_count=ar.count(len(items), "phase")))]
     if a.is_recurring:
         bank = P.METHODOLOGY_RECURRING.get(a.type_key) or P.METHODOLOGY_RECURRING["default"]
@@ -574,8 +582,11 @@ def _stem_match(user_title: str, lib_title: str) -> bool:
 
 
 def build_timeline(w: Writer, rng, tone):
+    return timeline_blocks(w, _schedule(w, _phases(w)), intro=w.choose(rng, P.TIMELINE_INTRO, tone))
+
+
+def timeline_blocks(w: Writer, phases: list[dict], intro: str = "") -> list[dict]:
     a = w.a
-    phases = _schedule(w, _phases(w))
     team_keys = {m for m in _team_keys(w)}
     rows = []
     n_rows = w.caps["timeline_rows"]
@@ -584,7 +595,7 @@ def build_timeline(w: Writer, rng, tone):
         span = p["days"]
         k = len(acts)
         owner_key = p.get("owner") if p.get("owner") in team_keys else "project_manager"
-        owner = _role_title(w, owner_key)[0]
+        owner = p.get("owner_title") or _role_title(w, owner_key)[0]
         for i, act in enumerate(acts):
             if k == 1 or span < k or p.get("recurring"):
                 off, d = p["offset"], span
@@ -604,10 +615,8 @@ def build_timeline(w: Writer, rng, tone):
             milestones.append({"id": _id(), "label": f"تقرير الشهر {m}", "offset": m * 30})
             m += 1
     milestones.append({"id": _id(), "label": "التقرير الختامي", "offset": max(0, a.days - 1)})
-    blocks = [
-        blk("paragraph", text=w.choose(rng, P.TIMELINE_INTRO, tone)),
-        blk("timeline", start_date=a.start.isoformat() if a.start else None, total_days=a.days, rows=rows, milestones=milestones),
-    ]
+    blocks = [blk("paragraph", text=intro)] if intro else []
+    blocks.append(blk("timeline", start_date=a.start.isoformat() if a.start else None, total_days=a.days, rows=rows, milestones=milestones))
     return blocks
 
 
@@ -900,6 +909,35 @@ def build_content_plan(w: Writer, rng, tone):
     ]
 
 
+CELEB_ROLES = [
+    ("وجه الفكرة الرئيسي", "يطلق الفكرة بمحتوى افتتاحي يعرّف بها، ويعود في ذروة المشروع."),
+    ("تغطية التفعيلات الميدانية", "يحضر التفعيلات وينقلها لجمهوره مباشرة بقصص ومقاطع قصيرة."),
+    ("محتوى التجربة", "يجرّب ويشارك تجربته بأسلوبه المعتاد، بلا نص مكتوب."),
+    ("سلسلة محتوى قصيرة", "حلقات قصيرة متتابعة تحمل اسم الفكرة على منصته الأقوى."),
+    ("دعوة الجمهور للمشاركة", "يطرح تحديًا أو سؤالًا يدعو جمهوره للمشاركة ونشر تجربتهم."),
+    ("تذكير بالخطوة التالية", "محتوى قرب نهاية المشروع يذكّر بالعرض أو الموعد أو الرابط."),
+]
+
+
+def build_celebrities(w: Writer, rng, tone):
+    pool = w.library.get("celebrities") or []
+    count = {"brief": 4, "medium": 6, "advanced": 8}[w.a.detail]
+    picks = w.shuffled(rng, pool[: max(count, 1) * 2])[:count] if w.regen else pool[:count]
+    rows = []
+    for i, p in enumerate(picks):
+        role, text = CELEB_ROLES[i % len(CELEB_ROLES)]
+        reach = " · ".join(x for x in (p.get("platforms"), p.get("followers")) if x)
+        rows.append({"id": _id(), "name": p["name"] + (f"\n{p['handle']}" if p.get("handle") else ""), "reach": reach or "—",
+                     "category": p.get("category") or "—", "role": f"{role}: {text}",
+                     "why": ar.sentence("، ".join(x for x in (p.get("category"), p.get("city")) if x) or "مناسب لجمهور المشروع")})
+    intro = w.fill("رشحنا من قائمة المشاهير المعتمدة لدينا الأسماء الأقرب لجمهور {client} ولفكرة المشروع. التوزيع أدناه مقترح للنقاش.")
+    return [blk("paragraph", text=w.note(intro)),
+            blk("table", title="المرشحون من قائمة المشاهير", columns=[
+                {"key": "name", "label": "الاسم"}, {"key": "reach", "label": "المنصات والمتابعون"}, {"key": "category", "label": "المجال"},
+                {"key": "role", "label": "دوره والمحتوى المقترح"}, {"key": "why", "label": "لماذا نرشحه"}], rows=rows),
+            blk("callout", label="ملاحظة", text="الأسماء من قائمة المشاهير المعتمدة لدى أهداف، والأرقام كما وردت فيها. يُؤكَّد التوفر والأتعاب بعد اعتماد الترشيحات.")]
+
+
 BUILDERS = {
     "about": build_about, "intro": build_intro, "understanding": build_understanding,
     "objectives": build_objectives, "scope": build_scope, "methodology": build_methodology,
@@ -907,12 +945,18 @@ BUILDERS = {
     "governance": build_governance, "assumptions": build_assumptions, "risks": build_risks,
     "budget": build_budget, "past_projects": build_past_projects, "conclusion": build_conclusion,
     "idea": build_idea, "activations": build_activations, "content_plan": build_content_plan,
+    "celebrities": build_celebrities,
 }
 
 
-def _enabled_sections(a: Analysis) -> list[str]:
+def _enabled_sections(a: Analysis, library: dict) -> list[str]:
     out = []
+    extra = set(a.prefs.get("extra_sections") or [])
     for sec in SECTION_ORDER:
+        if sec in OPTIONAL_SECTIONS and sec not in extra:
+            continue
+        if sec == "celebrities" and not library.get("celebrities"):
+            continue
         if sec == "about" and not a.prefs.get("include_about", True):
             continue
         if sec == "budget" and not (a.budget and a.show_budget):
@@ -946,7 +990,7 @@ def generate(inputs: dict, library: dict, settings: dict, seed: int | None = Non
     seed = seed if seed is not None else random.randint(1, 10_000_000)
     w = Writer(a, library, settings, seed)
     sections = []
-    for sec in _enabled_sections(a):
+    for sec in _enabled_sections(a, library):
         rng = w.rng(sec, 0)
         blocks = BUILDERS[sec](w, rng, None)
         sections.append(_section(sec, w, rng, blocks, 0, None))

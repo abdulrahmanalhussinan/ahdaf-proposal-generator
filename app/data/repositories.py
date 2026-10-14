@@ -416,9 +416,81 @@ class UploadRepo:
         return _row(get_connection().execute("SELECT * FROM uploads WHERE id = ?", (uid,)).fetchone())
 
 
+# --------------------------------------------------------------------------- celebrities
+class CelebrityRepo:
+    FIELDS = ("name", "handle", "platforms", "followers", "category", "city", "gender", "notes")
+
+    def _out(self, row) -> dict:
+        d = dict(row)
+        d["extra"] = _loads(d.get("extra"), {})
+        return d
+
+    def list(self, q: str = "") -> list[dict]:
+        rows = [self._out(r) for r in get_connection().execute("SELECT * FROM celebrities ORDER BY created_at, rowid").fetchall()]
+        if q:
+            nq = normalize(q)
+            rows = [r for r in rows if nq in normalize(" ".join(str(r.get(f) or "") for f in self.FIELDS) + " " + " ".join(map(str, r["extra"].values())))]
+        return rows
+
+    def count(self) -> int:
+        return get_connection().execute("SELECT COUNT(*) FROM celebrities").fetchone()[0]
+
+    def sources(self) -> list[dict]:
+        rows = get_connection().execute(
+            "SELECT source, COUNT(*) AS n, MAX(created_at) AS at FROM celebrities GROUP BY source ORDER BY at DESC").fetchall()
+        return [dict(r) for r in rows]
+
+    def add_many(self, items: list[dict], source: str) -> dict:
+        """Insert rows, skipping people already in the list (same name + same handle)."""
+        existing = {(normalize(r["name"]), normalize(r.get("handle") or "")) for r in self.list()}
+        added = skipped = 0
+        with transaction() as conn:
+            for it in items:
+                key = (normalize(it["name"]), normalize(it.get("handle") or ""))
+                if not key[0] or key in existing:
+                    skipped += 1
+                    continue
+                existing.add(key)
+                conn.execute(
+                    "INSERT INTO celebrities (id, name, handle, platforms, followers, category, city, gender, notes, extra, source, created_at)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (new_id(), *(str(it.get(f) or "").strip()[:500] or None for f in self.FIELDS), _dumps(it.get("extra") or {}),
+                     source, now_iso()))
+                added += 1
+        return {"added": added, "skipped": skipped}
+
+    def delete(self, cid: str) -> None:
+        with transaction() as conn:
+            conn.execute("DELETE FROM celebrities WHERE id = ?", (cid,))
+
+    def delete_source(self, source: str) -> None:
+        with transaction() as conn:
+            conn.execute("DELETE FROM celebrities WHERE source = ?", (source,))
+
+    def clear(self) -> None:
+        with transaction() as conn:
+            conn.execute("DELETE FROM celebrities")
+
+
+# --------------------------------------------------------------------------- documents
+class DocumentRepo:
+    def create(self, filename: str, mime: str, size: int, stored_name: str | None, pages: int | None, text: str) -> dict:
+        did = new_id()
+        with transaction() as conn:
+            conn.execute(
+                "INSERT INTO documents (id, filename, mime, size, stored_name, pages, text, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (did, filename, mime, size, stored_name, pages, text, now_iso()))
+        return self.get(did)
+
+    def get(self, did: str) -> dict | None:
+        return _row(get_connection().execute("SELECT * FROM documents WHERE id = ?", (did,)).fetchone())
+
+
 clients = ClientRepo()
 proposals = ProposalRepo()
 library = LibraryRepo()
 templates = TemplateRepo()
 settings = SettingsRepo()
 uploads = UploadRepo()
+celebrities = CelebrityRepo()
+documents = DocumentRepo()

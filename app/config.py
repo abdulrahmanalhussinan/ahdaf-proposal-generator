@@ -35,11 +35,16 @@ WEB_DIR = BASE_DIR / "web"
 HOST = os.getenv("AHDAF_HOST", "127.0.0.1")
 PORT = int(os.getenv("AHDAF_PORT", "8765"))
 
-# AI writing provider: "rules" (built-in engine, default), "claude", or "auto"
-# (use Claude when a key is configured, otherwise the built-in engine).
+# Who writes the proposals:
+#   "auto" (default): Claude via the API key below if set, otherwise via Claude Code if it is installed
+#                     on this machine (`claude`, signed in), otherwise the built-in engine;
+#   "api" / "cli": force one of them;  "rules": built-in engine only.
 AI_PROVIDER = os.getenv("AI_PROVIDER", "auto").lower()
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-opus-5")
+CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-opus-5-5")
+CLAUDE_CLI = os.getenv("CLAUDE_CLI", "")  # path to the claude executable; found automatically when empty
+CLAUDE_CLI_MODEL = os.getenv("CLAUDE_CLI_MODEL", "opus")
+AI_TIMEOUT = int(os.getenv("AI_TIMEOUT", "900"))  # seconds for one writing call
 
 # Uploads
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024

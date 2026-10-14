@@ -3,18 +3,23 @@
 The static site runs this package inside the visitor's browser with Pyodide. `handle()` receives
 the same method/path/body the web app would send to the HTTP API and answers with the same JSON,
 by calling the same service functions the FastAPI routes use. Data lives in a SQLite file in the
-browser's own storage (IndexedDB) and never leaves the device. The AI provider is always the
-built-in engine here: API keys never belong in a browser.
+browser's own storage (IndexedDB) and never leaves the device.
+
+Claude writing works here with the visitor's own API key, kept in their browser only: the page asks
+`/api/ai/request` for the prompt, calls Claude itself (web/js/lib/ai.js), and sends the answer back
+as `ai_content`, which goes through the same guards as on the server. Uploaded files arrive as base64.
 """
 from __future__ import annotations
 
+import base64
 import json
 import re
 from typing import Any, Callable
 
 from app.data import repositories as repo
 from app.data.seed import ensure_seeded
-from app.services import catalog
+from app.services import catalog, documents, files
+from app.services import celebrities as celebs
 from app.services import proposals as svc
 
 LOCAL_USER = ("أنت (نسخة المتصفح)", "admin")
@@ -82,7 +87,21 @@ def _generate(q, b):
     if not ((inputs.get("project") or {}).get("name") or "").strip():
         raise HttpError(422, "اسم المشروع مطلوب")
     status = b.get("status") if b.get("status") in STATUS_KEYS else "draft"
-    return svc.create_from_inputs(inputs, status=status, owner="browser")
+    return svc.create_from_inputs(inputs, status=status, owner="browser", ai_content=_ai(b))
+
+
+def _ai(b: dict) -> dict | None:
+    content = b.get("ai_content")
+    return content if isinstance(content, dict) else None
+
+
+@route("POST", "/api/ai/request")
+def _ai_request(q, b):
+    try:
+        return svc.ai_request(inputs=b.get("inputs"), proposal_id=b.get("proposal_id"), section_id=b.get("section_id"),
+                              tone=b.get("tone"), concept=b.get("concept") if isinstance(b.get("concept"), dict) else None)
+    except svc.NotFound:
+        raise HttpError(404, "العرض غير موجود")
 
 
 @route("GET", "/api/proposals/{pid}")
@@ -118,14 +137,14 @@ def _reuse(q, b, pid):
 @route("POST", "/api/proposals/{pid}/sections/{sid}/regenerate")
 def _regen_section(q, b, pid, sid):
     try:
-        return _get(svc.regenerate_section, pid, sid, b.get("tone"))
+        return _get(svc.regenerate_section, pid, sid, b.get("tone"), _ai(b))
     except ValueError as exc:
         raise HttpError(400, str(exc))
 
 
 @route("POST", "/api/proposals/{pid}/regenerate")
 def _regen_all(q, b, pid):
-    return _get(svc.regenerate_all, pid, b.get("inputs"))
+    return _get(svc.regenerate_all, pid, b.get("inputs"), _ai(b))
 
 
 @route("POST", "/api/proposals/{pid}/versions")
@@ -274,6 +293,50 @@ def _settings_put(q, b):
     return catalog.save_settings(b.get("values") or {})
 
 
+# ------------------------------------------------------------------ celebrities & documents
+def _file(b: dict) -> tuple[str, bytes]:
+    try:
+        return str(b.get("filename") or "ملف")[:200], base64.b64decode(b.get("data") or "")
+    except (ValueError, TypeError):
+        raise HttpError(422, "تعذر قراءة الملف")
+
+
+@route("GET", "/api/celebrities")
+def _celebs(q, b):
+    return celebs.overview(q.get("q", ""))
+
+
+@route("POST", "/api/celebrities/import")
+def _celebs_import(q, b):
+    try:
+        return celebs.import_file(*_file(b))
+    except files.FileError as exc:
+        raise HttpError(415, str(exc))
+
+
+@route("DELETE", "/api/celebrities")
+def _celebs_clear(q, b):
+    if q.get("source"):
+        repo.celebrities.delete_source(q["source"])
+    else:
+        repo.celebrities.clear()
+    return None
+
+
+@route("DELETE", "/api/celebrities/{cid}")
+def _celeb_delete(q, b, cid):
+    repo.celebrities.delete(cid)
+    return None
+
+
+@route("POST", "/api/documents")
+def _doc_upload(q, b):
+    try:
+        return documents.store(*_file(b), keep_file=False)  # browser storage keeps the text only
+    except files.FileError as exc:
+        raise HttpError(415, str(exc))
+
+
 # ------------------------------------------------------------------ entry points
 def init() -> None:
     ensure_seeded()
@@ -290,7 +353,7 @@ def handle(method: str, path: str, query_json: str = "{}", body_json: str = "nul
             match = regex.match(path)
             if match:
                 result = fn(query, body, **match.groupdict())
-                status = 204 if result is None else 201 if method == "POST" and path.endswith(("/generate", "/duplicate", "/save-as-template")) else 200
+                status = 204 if result is None else 201 if method == "POST" and path.endswith(("/generate", "/duplicate", "/save-as-template", "/import", "/documents")) else 200
                 return json.dumps({"status": status, "body": result}, ensure_ascii=False, default=str)
         raise HttpError(404, "غير موجود")
     except HttpError as exc:

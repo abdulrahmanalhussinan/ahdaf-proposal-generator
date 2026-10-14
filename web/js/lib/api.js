@@ -48,6 +48,18 @@ export const api = {
     fd.append('file', file);
     return request('POST', '/api/uploads', fd);
   },
+  // Files the server reads (celebrity sheets, client profiles). The browser edition sends them as base64.
+  async uploadFile(path, file) {
+    if (STATIC) {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      let bin = '';
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      return request('POST', path, { filename: file.name, data: btoa(bin) });
+    }
+    const fd = new FormData();
+    fd.append('file', file);
+    return request('POST', path, fd);
+  },
   async exportPptxLocal(id) { return (await localBackend()).exportPptx(id); },
   saveBlob,
   async download(url, fallbackName) {

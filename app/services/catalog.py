@@ -2,10 +2,10 @@
 library overview and the editable settings."""
 from __future__ import annotations
 
-from app.ai import provider as ai
+from app.ai import author as ai
 from app.data import repositories as repo
 from app.generator.analyzer import DETAILS, TONES
-from app.generator.engine import SECTION_TITLES
+from app.generator.engine import OPTIONAL_SECTIONS, SECTION_TITLES
 from app.generator.knowledge.ideas import SEGMENTS
 from app.generator.knowledge.objectives import DEFAULTS_BY_TYPE, OBJECTIVES
 from app.generator.knowledge.platforms import PLATFORM_ORDER, PLATFORMS
@@ -43,6 +43,8 @@ def meta(user_name: str, user_role: str) -> dict:
         "objectives": [{"key": k, "label": v["label"]} for k, v in OBJECTIVES.items()],
         "default_objectives": DEFAULTS_BY_TYPE,
         "ai": ai.status(),
+        "celebrities": repo.celebrities.count(),
+        "extra_sections": [{"key": k, "label": SECTION_TITLES[k]} for k in OPTIONAL_SECTIONS],
         "user": {"name": user_name, "role": user_role},
     }
 

@@ -1,15 +1,16 @@
 """Business logic for proposals: generation, editing, regeneration, duplication.
-API routes call these functions; they in turn use the generator, the AI provider and the repositories."""
+API routes call these functions; they in turn use the generator, the AI writer and the repositories."""
 from __future__ import annotations
 
 import copy
 from datetime import date
 
-from app.ai import provider as ai
+from app.ai import author
 from app.data import repositories as repo
 from app.data.seed import search_text_for
 from app.generator import engine
 from app.generator.analyzer import analyze
+from app.services import celebrities as celebs
 
 STATUSES = {"draft": "مسودة", "review": "قيد المراجعة", "sent": "مُرسل للعميل", "approved": "معتمد", "rejected": "غير معتمد"}
 
@@ -18,8 +19,23 @@ class NotFound(Exception):
     pass
 
 
-def _context() -> tuple[dict, dict]:
-    return repo.library.all_active(), repo.settings.get_all()
+def _context(inputs: dict | None = None) -> tuple[dict, dict]:
+    """Library + settings. With inputs, the library also carries the celebrity candidates for this brief."""
+    library = repo.library.all_active()
+    if inputs is not None:
+        a = analyze(inputs, library)
+        if celebs.wanted(inputs, a.type_key):
+            library["celebrities"] = celebs.candidates(inputs, a.sector_key, a.platform_labels)
+    return library, repo.settings.get_all()
+
+
+def _write(doc: dict, inputs: dict, library: dict, settings: dict, meta: dict, ai_content: dict | None) -> dict:
+    """Claude's sections: given by the browser edition, or written now by the server's writer."""
+    if ai_content:
+        written = author.apply(doc, ai_content, inputs, library, settings)
+        doc["ai"] = {"provider": "browser", "sections": written}
+        return doc
+    return author.write_document(doc, inputs, library, settings, meta)
 
 
 def _client_for(inputs: dict) -> dict | None:
@@ -35,6 +51,34 @@ def _client_for(inputs: dict) -> dict | None:
         "about": c.get("about"), "contact_name": c.get("contact_name"), "website": c.get("website"), "logo": c.get("logo")})
 
 
+def ai_request(inputs: dict | None = None, proposal_id: str | None = None, section_id: str | None = None,
+               tone: str | None = None, concept: dict | None = None) -> dict:
+    """Requests the browser edition sends to Claude with the visitor's own key.
+
+    Whole proposal: without `concept` → the creative-core request (stage one); with the core Claude
+    wrote → the stage-two requests, to run in parallel. One section: `proposal_id` + `section_id`."""
+    if proposal_id:
+        p = get(proposal_id)
+        inputs = p["inputs"]
+        library, settings = _context(inputs)
+        current = next((s for s in p["doc"].get("sections", []) if s["id"] == section_id), None)
+        if not current or current.get("type") not in author.WRITABLE:
+            return {"requests": []}
+        idea = next((s for s in p["doc"]["sections"] if s.get("type") == "idea" and s["id"] != section_id), None)
+        req = author.build_request(inputs, library, settings, p.get("meta") or {}, [current["type"]],
+                                   current=author.section_snapshot(current), tone=tone,
+                                   concept=author.section_snapshot(idea) if idea else None)
+        return {"requests": [req] if req["sections"] else []}
+    library, settings = _context(inputs)
+    result = engine.generate(inputs, library, settings)
+    sections = [s["type"] for s in result["doc"]["sections"] if s.get("type") in author.WRITABLE]
+    first, rest = author.stages(sections)
+    if concept is None:
+        return {"requests": [author.build_request(inputs, library, settings, result["meta"], first)], "stage": 1}
+    return {"requests": [author.build_request(inputs, library, settings, result["meta"], g, concept=concept) for g in rest],
+            "stage": 2}
+
+
 def analyze_inputs(inputs: dict) -> dict:
     library, _ = _context()
     a = analyze(inputs, library)
@@ -42,11 +86,12 @@ def analyze_inputs(inputs: dict) -> dict:
 
 
 def create_from_inputs(inputs: dict, status: str = "draft", is_demo: bool = False, created_at: str | None = None,
-                       today: date | None = None, seed: int | None = None, owner: str | None = None) -> dict:
-    library, settings = _context()
+                       today: date | None = None, seed: int | None = None, owner: str | None = None,
+                       ai_content: dict | None = None) -> dict:
+    library, settings = _context(inputs)
     result = engine.generate(inputs, library, settings, seed=seed, today=today)
     doc, meta = result["doc"], result["meta"]
-    doc = ai.enhance_document(doc, inputs, meta)  # no-op unless an AI provider is configured
+    doc = _write(doc, inputs, library, settings, meta, ai_content)
     client = _client_for(inputs)
     if client:
         inputs.setdefault("client", {})["id"] = client["id"]
@@ -99,23 +144,37 @@ def update(proposal_id: str, changes: dict) -> dict:
     return repo.proposals.update(proposal_id, patch)
 
 
-def regenerate_section(proposal_id: str, section_id: str, tone: str | None = None) -> dict:
+def regenerate_section(proposal_id: str, section_id: str, tone: str | None = None, ai_content: dict | None = None) -> dict:
     p = get(proposal_id)
-    library, settings = _context()
-    section = engine.regenerate_section(p["inputs"], p["doc"], section_id, library, settings, tone=tone)
-    section = ai.enhance_section(section, p["inputs"], p.get("meta") or {}, tone=tone)
+    library, settings = _context(p["inputs"])
+    current = next((s for s in p["doc"].get("sections", []) if s["id"] == section_id), None)
+    section = None
+    if current and (ai_content or author.provider()):
+        # Claude writes a different version of the same section, consistent with the rest of the proposal
+        fresh = copy.deepcopy(current)
+        fresh["regen"] = current.get("regen", 0) + 1
+        fresh["tone"] = tone or current.get("tone")
+        if ai_content:
+            tmp = {"seed": p["doc"].get("seed", 1), "cover": {},
+                   "sections": [s for s in p["doc"]["sections"] if s.get("type") == "idea" and s["id"] != section_id] + [fresh]}
+            ok = bool(author.apply(tmp, ai_content, p["inputs"], library, settings, only=[fresh["type"]]))
+        else:
+            ok = author.rewrite_section(p["doc"], fresh, p["inputs"], library, settings, p.get("meta") or {}, tone=tone)
+        section = fresh if ok else None
+    if section is None:
+        section = engine.regenerate_section(p["inputs"], p["doc"], section_id, library, settings, tone=tone)
     doc = p["doc"]
     doc["sections"] = [section if s["id"] == section_id else s for s in doc["sections"]]
     repo.proposals.update(proposal_id, {"doc": doc})
     return section
 
 
-def regenerate_all(proposal_id: str, inputs: dict | None = None) -> dict:
+def regenerate_all(proposal_id: str, inputs: dict | None = None, ai_content: dict | None = None) -> dict:
     p = get(proposal_id)
     inputs = inputs or p["inputs"]
-    library, settings = _context()
+    library, settings = _context(inputs)
     result = engine.generate(inputs, library, settings)
-    doc = ai.enhance_document(result["doc"], inputs, result["meta"])
+    doc = _write(result["doc"], inputs, library, settings, result["meta"], ai_content)
     old_cover = p["doc"].get("cover") or {}
     doc["cover"]["image"] = old_cover.get("image")
     doc["cover"]["client_logo"] = old_cover.get("client_logo") or doc["cover"].get("client_logo")

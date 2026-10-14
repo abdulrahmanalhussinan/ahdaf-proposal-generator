@@ -97,6 +97,34 @@ CREATE TABLE IF NOT EXISTS uploads (
     stored_name TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+
+-- Celebrities / influencers imported from the team's own sheets. Proposals only ever name people from here.
+CREATE TABLE IF NOT EXISTS celebrities (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    handle TEXT,
+    platforms TEXT,
+    followers TEXT,
+    category TEXT,
+    city TEXT,
+    gender TEXT,
+    notes TEXT,
+    extra TEXT NOT NULL DEFAULT '{}',
+    source TEXT,
+    created_at TEXT NOT NULL
+);
+
+-- Uploaded reference documents (client profiles) and the text extracted from them.
+CREATE TABLE IF NOT EXISTS documents (
+    id TEXT PRIMARY KEY,
+    filename TEXT NOT NULL,
+    mime TEXT,
+    size INTEGER NOT NULL DEFAULT 0,
+    stored_name TEXT,
+    pages INTEGER,
+    text TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
 """
 
 _lock = threading.RLock()

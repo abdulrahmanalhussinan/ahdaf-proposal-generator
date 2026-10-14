@@ -60,7 +60,7 @@ def run() -> None:
         page.locator("#c-sector").select_option("food_beverage")
         page.locator("#p-name").fill("إدارة حسابات التواصل الاجتماعي")
         page.get_by_role("radio", name="إدارة منصات التواصل الاجتماعي").click()
-        page.get_by_placeholder("مثال: نبي نرفع حضور الشركة").fill("نبي نرفع حضور المطاعم ونزيد الطلبات.")
+        page.get_by_placeholder("مثال: نركز على الرياض").fill("نبي نرفع حضور المطاعم ونزيد الطلبات.")
         shot(page, "02-wizard-project")
         page.get_by_role("button", name="التالي").click()
         page.locator(".chips").nth(0).locator(".chip").first.click()  # first suggested audience segment
@@ -86,10 +86,10 @@ def run() -> None:
         sections = page.locator(".ed-nav .sec-item .t").all_inner_texts()
         expected = ["المقدمة", "فهمنا للمشروع", "أهداف المشروع", "الفكرة الإبداعية", "أفكار تفعيلية مقترحة",
                     "محاور المحتوى وخطة النشر", "نطاق العمل", "منهجية وآلية التنفيذ", "المخرجات",
-                    "الجدول الزمني", "فريق العمل", "مؤشرات الأداء", "الحوكمة وإدارة المشروع", "الافتراضات والمتطلبات",
-                    "المخاطر وآلية التعامل معها", "الخاتمة"]
+                    "الجدول الزمني", "مؤشرات الأداء", "الخاتمة"]
         missing = [s for s in expected if s not in sections]
         check("all required + creative sections exist", not missing, f"missing: {missing}" if missing else f"{len(sections)} sections")
+        check("filler sections are off by default", not {"فريق العمل", "الحوكمة وإدارة المشروع"} & set(sections))
 
         page.locator(".ed-nav .sec-item", has_text="فهمنا للمشروع").click()
         title = page.locator(".title-in")
@@ -115,7 +115,7 @@ def run() -> None:
         shot(page, "05-editor-deliverables")
 
         # hide a section and reorder via keyboard
-        page.locator(".ed-nav .sec-item", has_text="المخاطر").locator(".eye").click()
+        page.locator(".ed-nav .sec-item", has_text="مؤشرات الأداء").locator(".eye").click()
         page.wait_for_timeout(1500)
 
         saved = json.loads(urllib.request.urlopen(f"{BASE}/api/proposals/{pid}").read().decode("utf-8"))
@@ -123,12 +123,12 @@ def run() -> None:
         check("edited title persisted", secs["understanding"]["title"] == "فهمنا لاحتياج المطاعم")
         dl = next(b for b in secs["deliverables"]["blocks"] if b["type"] == "deliverables")
         check("edited quantity persisted", dl["rows"][0]["qty"] == 15, str(dl["rows"][0]["qty"]))
-        check("hidden section persisted", secs["risks"]["visible"] is False)
+        check("hidden section persisted", secs["kpis"]["visible"] is False)
         check("chosen design saved", saved["doc"]["theme"] == "night")
         check("«أخرى» service used", "تصوير الأطباق داخل المطعم" in saved["meta"]["service_labels"])
         check("objective target from «أخرى» text", any(k["target"] == "6%" for s2 in saved["doc"]["sections"] for b in s2["blocks"] if b["type"] == "kpis" for k in b["items"]))
         check("no unfilled placeholders", "[[" not in json.dumps(saved["doc"], ensure_ascii=False))
-        page.locator(".ed-nav .sec-item", has_text="المخاطر").locator(".eye").click()
+        page.locator(".ed-nav .sec-item", has_text="مؤشرات الأداء").locator(".eye").click()
         page.wait_for_timeout(1500)
 
         # ------------------------------------------------------------ search
@@ -160,6 +160,15 @@ def run() -> None:
         page.wait_for_selector(".viewer .pg")
         n = page.locator(".viewer .pg").count()
         check("viewer renders paginated pages", n >= 15, f"{n} pages")
+        page.goto(f"{BASE}/celebrities", wait_until="networkidle")
+        with page.expect_file_chooser() as fc:
+            page.get_by_text("رفع شيت (Excel أو CSV)").click()
+        sheet = OUT / "celebs.csv"
+        sheet.write_text("الاسم,المنصة,المتابعين,المدينة\nمشهور اختبار,سناب شات,1M,الرياض\n", encoding="utf-8-sig")
+        fc.value.set_files(str(sheet))
+        page.wait_for_selector("text=مشهور اختبار", timeout=10_000)
+        check("celebrity sheet uploads and lists", page.locator(".table tbody tr").count() >= 1)
+        shot(page, "06b-celebrities")
         page.goto(f"{BASE}/templates", wait_until="networkidle")
         page.wait_for_selector(".design-opt .pg")
         check("templates page shows 4 designs", page.locator(".design-opt").count() == 4)

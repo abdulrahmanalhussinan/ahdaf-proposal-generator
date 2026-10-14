@@ -3,14 +3,15 @@ import re
 
 import pytest
 
-from app.ai import provider as ai
 from app.core import arabic as ar
 from app.generator import engine
 from app.generator.knowledge.project_types import TYPE_ORDER
 from tests.conftest import make_inputs
 
-REQUIRED = {"intro", "understanding", "objectives", "scope", "methodology", "deliverables", "timeline", "team",
-            "kpis", "governance", "assumptions", "risks", "conclusion"}
+REQUIRED = {"intro", "understanding", "objectives", "idea", "activations", "scope", "methodology", "deliverables",
+            "timeline", "kpis", "conclusion"}
+OPTIONAL = {"team", "governance", "assumptions", "risks"}
+ALL_EXTRA = {"extra_sections": sorted(OPTIONAL)}
 NARRATIVE = {"paragraph", "lead", "callout"}
 
 
@@ -31,14 +32,30 @@ def test_every_project_type_generates_all_required_sections(ptype, library, sett
     out = engine.generate(make_inputs(project={"type": ptype, "name": f"مشروع {ptype}"}), library, settings, seed=3)
     types = {s["type"] for s in out["doc"]["sections"]}
     assert REQUIRED <= types
+    assert not types & OPTIONAL  # filler sections are off unless asked for
     assert out["doc"]["cover"]["title"] == f"مشروع {ptype}"
+
+
+def test_optional_sections_come_back_when_asked_for(library, settings):
+    out = engine.generate(make_inputs(preferences=ALL_EXTRA), library, settings, seed=3)
+    assert OPTIONAL <= {s["type"] for s in out["doc"]["sections"]}
+
+
+def test_team_idea_is_not_pasted_into_the_document(library, settings):
+    idea = "نبي نركز على الرياض ونجيب مشاهير يزورون الفروع"
+    inputs = make_inputs(project={"description": idea}, preferences={"requirements": "التسليم قبل رمضان"})
+    doc = engine.generate(inputs, library, settings, seed=2)["doc"]
+    text = json.dumps(doc, ensure_ascii=False)
+    assert idea not in text and "التسليم قبل رمضان" not in text
+    und = next(s for s in doc["sections"] if s["type"] == "understanding")
+    assert "الرياض" in json.dumps(und, ensure_ascii=False)  # the city focus is understood and built on
 
 
 @pytest.mark.parametrize("ptype", TYPE_ORDER)
 def test_no_invented_numbers(ptype, library, settings):
     """Every digit in generated narrative must come from the inputs, the dates/duration derived from
     them, or the number of methodology phases — never from thin air."""
-    inputs = make_inputs(project={"type": ptype, "name": "مشروع الاختبار"})
+    inputs = make_inputs(project={"type": ptype, "name": "مشروع الاختبار"}, preferences=ALL_EXTRA)
     out = engine.generate(inputs, library, settings, seed=11)
     allowed = set(re.findall(r"\d+", json.dumps(inputs, ensure_ascii=False)))
     allowed |= {"2026", "2027", "1", "2", "6", "30"}  # start/end years, durations, day numbers of dates
@@ -117,11 +134,12 @@ def test_suggested_objectives_are_flagged(library, settings):
 
 
 def test_projects_of_different_nature_produce_different_proposals(library, settings):
-    tiktok = engine.generate(make_inputs(), library, settings, seed=5)["doc"]
+    tiktok = engine.generate(make_inputs(preferences=ALL_EXTRA), library, settings, seed=5)["doc"]
     event = engine.generate(make_inputs(client={"name": "مجموعة الأفق العقارية", "sector": "real_estate"},
                                         project={"type": "event", "name": "حفل تدشين المشروع", "platforms": [],
                                                  "description": "حفل تدشين للمشروع السكني بحضور الشركاء والإعلام."},
-                                        timeline={"duration_value": 6, "duration_unit": "week"}), library, settings, seed=5)["doc"]
+                                        timeline={"duration_value": 6, "duration_unit": "week"}, preferences=ALL_EXTRA),
+                            library, settings, seed=5)["doc"]
 
     def phases(doc):
         return [i["title"] for s in doc["sections"] if s["type"] == "methodology" for b in s["blocks"] if b["type"] == "phases" for i in b["items"]]
@@ -152,8 +170,8 @@ def test_tone_changes_the_writing(library, settings):
 
 
 def test_detail_level_changes_depth(library, settings):
-    brief = engine.generate(make_inputs(preferences={"detail": "brief"}), library, settings, seed=4)["doc"]
-    adv = engine.generate(make_inputs(preferences={"detail": "advanced"}), library, settings, seed=4)["doc"]
+    brief = engine.generate(make_inputs(preferences={"detail": "brief", **ALL_EXTRA}), library, settings, seed=4)["doc"]
+    adv = engine.generate(make_inputs(preferences={"detail": "advanced", **ALL_EXTRA}), library, settings, seed=4)["doc"]
     count = lambda d, t, key: len(next(b[key] for s in d["sections"] if s["type"] == t for b in s["blocks"] if key in b and isinstance(b[key], list) and b["type"] in ("kpis", "risks")))
     assert count(brief, "kpis", "items") < count(adv, "kpis", "items")
     assert count(brief, "risks", "rows") < count(adv, "risks", "rows")
@@ -195,7 +213,7 @@ def test_user_deliverables_merge_with_library_and_scale_monthly(library, setting
 
 
 def test_team_size_is_respected(library, settings):
-    doc = engine.generate(make_inputs(timeline={"team_size": 3}), library, settings, seed=1)["doc"]
+    doc = engine.generate(make_inputs(timeline={"team_size": 3}, preferences={"extra_sections": ["team"]}), library, settings, seed=1)["doc"]
     members = next(b for s in doc["sections"] if s["type"] == "team" for b in s["blocks"] if b["type"] == "team")["members"]
     assert sum(m["count"] for m in members) == 3
     assert members[0]["role"] == "مدير المشروع"
@@ -208,53 +226,6 @@ def test_arabic_helpers():
     assert ar.count(5, "month") == "5 أشهر" and ar.count(12, "month") == "12 شهرًا"
     assert ar.normalize("أهداف") == ar.normalize("اهداف")
     assert ar.normalize("مؤسسة") == ar.normalize("مؤسسه")
-
-
-class FakeClient:
-    def __init__(self, transform):
-        self.transform = transform
-        self.beta = self
-        self.messages = self
-
-    def create(self, **kw):
-        segs = json.loads(kw["messages"][0]["content"].split("المقاطع:")[1])
-        out = {"segments": [{"id": s["id"], "text": self.transform(s["text"])} for s in segs]}
-
-        class Block:
-            type = "text"
-            text = json.dumps(out, ensure_ascii=False)
-
-        class Resp:
-            stop_reason = "end_turn"
-            content = [Block()]
-
-        assert kw["fallbacks"] == "default" and "server-side-fallback-2026-07-01" in kw["betas"]
-        return Resp()
-
-
-def test_ai_rewrite_guards_against_invented_facts(library, settings, monkeypatch):
-    inputs = make_inputs()
-    out = engine.generate(inputs, library, settings, seed=1)
-    monkeypatch.setattr(ai, "provider_name", lambda: "claude")
-
-    ai.set_client(FakeClient(lambda t: t + " حققنا 250% نموًا."))  # invents a number -> rejected
-    doc = ai.enhance_document(json.loads(json.dumps(out["doc"])), inputs, out["meta"])
-    assert "250%" not in json.dumps(doc, ensure_ascii=False)
-
-    with_field = json.loads(json.dumps(out["doc"]))
-    intro = next(sec for sec in with_field["sections"] if sec["type"] == "intro")
-    intro["blocks"][0]["text"] += " [[حدد الجمهور المستهدف]]"
-    ai.set_client(FakeClient(lambda t: re.sub(r"\[\[[^\]]+\]\]", "الشباب", t)))  # drops a placeholder -> rejected
-    doc = ai.enhance_document(with_field, inputs, out["meta"])
-    assert "[[حدد الجمهور المستهدف" in json.dumps(doc, ensure_ascii=False)
-
-    ai.set_client(FakeClient(lambda t: "صياغة محسّنة: " + t))  # valid rewrite -> applied
-    doc = ai.enhance_document(json.loads(json.dumps(out["doc"])), inputs, out["meta"])
-    assert "صياغة محسّنة" in json.dumps(doc, ensure_ascii=False)
-    assert doc["ai"]["segments"] > 0
-    about = next(s for s in doc["sections"] if s["type"] == "about")
-    assert "صياغة محسّنة" not in json.dumps(about, ensure_ascii=False)  # official copy untouched
-    ai.set_client(None)
 
 
 @pytest.mark.parametrize("design", ["ahdaf", "night", "bold", "minimal"])
