@@ -53,7 +53,8 @@ def wanted(inputs: dict, type_key: str) -> bool:
     if mode == "yes":
         return True
     text = normalize(_text_of(inputs))
-    return type_key in ("influencer",) or any(normalize(w) in text for w in WANT_WORDS) or (
+    types = set((inputs.get("project") or {}).get("types") or []) | {type_key}
+    return "influencer" in types or any(normalize(w) in text for w in WANT_WORDS) or (
         type_key in CELEB_TYPES and "influencer_marketing" in ((inputs.get("services") or {}).get("selected") or []))
 
 

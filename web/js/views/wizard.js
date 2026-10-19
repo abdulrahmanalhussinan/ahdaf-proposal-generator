@@ -25,7 +25,7 @@ const DURATIONS = [
 
 const empty = () => ({
   client: { name: '', sector: '', about: '', logo: null, profile: null },
-  project: { name: '', type: '', type_other: '', description: '', brief: '', audience: [], audience_other: '', platforms: [], platforms_other: '', event_date: '' },
+  project: { name: '', type: '', types: [], type_other: '', description: '', brief: '', audience: [], audience_other: '', platforms: [], platforms_other: '', event_date: '' },
   services: { selected: [], other: '' },
   timeline: { duration_value: '', duration_unit: 'month', start_date: '' },
   goals: { objective_keys: [], objectives: '' },
@@ -37,6 +37,8 @@ function merge(base, extra) {
   for (const k of Object.keys(extra || {})) {
     out[k] = typeof base[k] === 'object' && base[k] && !Array.isArray(base[k]) ? { ...base[k], ...(extra[k] || {}) } : extra[k];
   }
+  // older proposals had a single project type
+  if (out.project.type && !(out.project.types || []).length) out.project.types = [out.project.type];
   // older proposals stored the audience as free text
   if (typeof out.project.audience === 'string') {
     out.project.audience_other = [out.project.audience_other, out.project.audience].filter(Boolean).join('، ');
@@ -125,8 +127,9 @@ export function Wizard({ params, query }) {
     const e = {};
     if (!data.client.name.trim()) e.client = 'اكتب اسم العميل';
     if (!data.project.name.trim()) e.project = 'اكتب اسم المشروع';
-    if (!data.project.type) e.type = 'اختر نوع المشروع';
-    if (data.project.type === 'other' && !data.project.type_other.trim()) e.type = 'اكتب نوع المشروع';
+    const ts = data.project.types || [];
+    if (!ts.length) e.type = 'اختر نوع المشروع';
+    if (ts.includes('other') && !data.project.type_other.trim()) e.type = 'اكتب نوع المشروع في «أخرى»';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -253,6 +256,11 @@ function StepProject({ data, set, meta, lib, errors, setData }) {
     setData((d) => ({ ...d, client: found ? { ...d.client, id: found.id, name: found.name, sector: found.sector || d.client.sector, logo: found.logo || d.client.logo } : { ...d.client, id: undefined, name } }));
   };
   const types = [...(meta?.project_types || []).filter((t) => t.key !== 'other')];
+  const pickedTypes = p.types || (p.type ? [p.type] : []);
+  const toggleType = (k) => {
+    const next = pickedTypes.includes(k) ? pickedTypes.filter((x) => x !== k) : [...pickedTypes, k];
+    setData((d) => ({ ...d, project: { ...d.project, types: next, type: next[0] || '' } }));
+  };
   return html`<div class="stack">
     <div class="row">
       <${Field} label="اسم العميل" required id="c-name" error=${errors.client}>
@@ -269,12 +277,12 @@ function StepProject({ data, set, meta, lib, errors, setData }) {
     <${Field} label="اسم المشروع" required id="p-name" error=${errors.project}>
       <input id="p-name" class=${`input ${errors.project ? 'invalid' : ''}`} value=${p.name} onInput=${(e) => set('project', 'name', e.target.value)} placeholder="مثال: إدارة حساب تيك توك، حفل تدشين، حملة رمضان…" />
     </${Field}>
-    <div class="field"><span class="lbl">نوع المشروع<span class="req">*</span></span>
-      <div class="type-grid" role="radiogroup">
-        ${types.map((t) => html`<button type="button" role="radio" aria-checked=${p.type === t.key} class=${`type-opt ${p.type === t.key ? 'on' : ''}`} onClick=${() => set('project', 'type', t.key)}><span class="ti"><${Icon} name=${t.icon} /></span>${t.label}</button>`)}
-        <button type="button" role="radio" aria-checked=${p.type === 'other'} class=${`type-opt ${p.type === 'other' ? 'on' : ''}`} onClick=${() => set('project', 'type', 'other')}><span class="ti"><${Icon} name="plus" /></span>أخرى</button>
+    <div class="field"><span class="lbl">نوع المشروع<span class="req">*</span><span class="opt">اختر نوعًا أو أكثر</span></span>
+      <div class="type-grid" role="group" aria-label="نوع المشروع">
+        ${[...types, { key: 'other', label: 'أخرى', icon: 'plus' }].map((t) => { const on = pickedTypes.includes(t.key); return html`<button type="button" role="checkbox" aria-checked=${on} class=${`type-opt ${on ? 'on' : ''}`} onClick=${() => toggleType(t.key)}><span class="ti"><${Icon} name=${on ? 'check' : t.icon} /></span>${t.label}${on && pickedTypes.length > 1 && pickedTypes[0] === t.key ? html`<span class="main-tag">رئيسي</span>` : ''}</button>`; })}
       </div>
-      ${p.type === 'other' && html`<input class="input" style="margin-top:8px" value=${p.type_other} onInput=${(e) => set('project', 'type_other', e.target.value)} placeholder="اكتب نوع المشروع، مثل: رحلة تعريفية للإعلاميين" />`}
+      ${pickedTypes.includes('other') && html`<input class="input" style="margin-top:8px" value=${p.type_other} onInput=${(e) => set('project', 'type_other', e.target.value)} placeholder="اكتب نوع المشروع، مثل: رحلة تعريفية للإعلاميين" />`}
+      ${pickedTypes.length > 1 && html`<span class="hint">يبني النظام عرضًا واحدًا متكاملًا يجمع ${pickedTypes.length} أنواع. أول نوع اخترته هو الرئيسي.</span>`}
       ${errors.type && html`<span class="err">${errors.type}</span>`}
     </div>
     <${Field} label="نشاط العميل" optional hint="وش يسوي العميل وش يميزه؟ بكلامك، والذكاء الاصطناعي يفهمه ويبني عليه بدل الكلام العام عن القطاع.">
@@ -317,12 +325,13 @@ function StepSuggest({ data, set, meta, lib }) {
   const p = data.project;
   const sectorKey = data.client.sector;
   const segments = (meta?.segments || {})[sectorKey] || (meta?.segments || {}).general || [];
-  const defaultsObj = (meta?.default_objectives || {})[p.type] || [];
+  const ts = p.types && p.types.length ? p.types : (p.type ? [p.type] : []);
+  const defaultsObj = ts.flatMap((t) => (meta?.default_objectives || {})[t] || []);
   const objOptions = [...(meta?.objectives || [])].sort((a, b) => (defaultsObj.includes(b.key) ? 1 : 0) - (defaultsObj.includes(a.key) ? 1 : 0)).slice(0, 10);
-  const typeMeta = (meta?.project_types || []).find((t) => t.key === p.type);
+  const typeDefaults = (meta?.project_types || []).filter((t) => ts.includes(t.key)).flatMap((t) => t.default_services || []);
   const relevant = lib.services.filter((s) => {
     const types = s.data?.types || [];
-    return types.includes('*') || types.includes(p.type) || (typeMeta?.default_services || []).includes(s.key);
+    return types.includes('*') || ts.some((t) => types.includes(t)) || typeDefaults.includes(s.key);
   });
   const t = data.timeline;
   const durKey = (DURATIONS.find((d) => String(d.v) === String(t.duration_value) && d.u === t.duration_unit) || {}).value || '';
@@ -338,7 +347,7 @@ function StepSuggest({ data, set, meta, lib }) {
       <${ChipsOther} options=${objOptions.map((o) => ({ value: o.key, label: o.label }))} value=${data.goals.objective_keys || []} onChange=${(v) => set('goals', 'objective_keys', v)}
         other=${data.goals.objectives} onOther=${(v) => set('goals', 'objectives', v)} placeholder="هدف آخر" />
     </${Field}>
-    ${PLATFORM_TYPES.includes(p.type) && html`<${Field} label="المنصات">
+    ${ts.some((t) => PLATFORM_TYPES.includes(t)) && html`<${Field} label="المنصات">
       <${ChipsOther} options=${(meta?.platforms || []).map((x) => ({ value: x.key, label: x.label }))} value=${p.platforms || []} onChange=${(v) => set('project', 'platforms', v)}
         other=${p.platforms_other} onOther=${(v) => set('project', 'platforms_other', v)} placeholder="منصة أخرى" />
     </${Field}>`}
@@ -353,9 +362,9 @@ function StepSuggest({ data, set, meta, lib }) {
         ${customDur && html`<div class="inline" style="flex-wrap:nowrap;margin-top:8px"><input class="input" type="number" min="1" style="max-width:110px" value=${t.duration_value} onInput=${(e) => set('timeline', 'duration_value', e.target.value)} />
           <${Seg} value=${t.duration_unit || 'month'} onChange=${(v) => set('timeline', 'duration_unit', v)} options=${[{ value: 'day', label: 'يوم' }, { value: 'week', label: 'أسبوع' }, { value: 'month', label: 'شهر' }]} /></div>`}
       </div>
-      <${Field} label=${EVENT_TYPES.includes(p.type) ? 'تاريخ البداية / تاريخ الفعالية' : 'تاريخ البداية'} optional>
+      <${Field} label=${ts.some((t) => EVENT_TYPES.includes(t)) ? 'تاريخ البداية / تاريخ الفعالية' : 'تاريخ البداية'} optional>
         <div class="inline" style="flex-wrap:nowrap"><input class="input" type="date" value=${t.start_date} onInput=${(e) => set('timeline', 'start_date', e.target.value)} aria-label="تاريخ البداية" />
-        ${EVENT_TYPES.includes(p.type) && html`<input class="input" type="date" value=${p.event_date} onInput=${(e) => set('project', 'event_date', e.target.value)} aria-label="تاريخ الفعالية" />`}</div>
+        ${ts.some((t) => EVENT_TYPES.includes(t)) && html`<input class="input" type="date" value=${p.event_date} onInput=${(e) => set('project', 'event_date', e.target.value)} aria-label="تاريخ الفعالية" />`}</div>
       </${Field}>
     </div>
     <div class="row">

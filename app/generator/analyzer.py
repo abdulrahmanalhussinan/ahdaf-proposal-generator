@@ -54,7 +54,7 @@ class Analysis:
     project: str
     type_key: str
     ptype: dict
-    secondary_types: list[str]
+    secondary_types: list[str]  # other types the project combines (chosen by the team, then detected)
     sector_key: str
     sector: dict
     platforms: list[str]
@@ -88,6 +88,7 @@ class Analysis:
     extra_platforms: list[str] = field(default_factory=list)
     suggested: list[str] = field(default_factory=list)  # what the system proposed on its own
     cities: list[str] = field(default_factory=list)  # cities the brief focuses on
+    chosen_types: list[str] = field(default_factory=list)  # project types the team picked, main one first
 
     # ------------------------------------------------------------------ derived helpers
     @property
@@ -277,17 +278,21 @@ def analyze(inputs: dict, library: dict[str, list[dict]]) -> Analysis:
     scope_text = (scope_in.get("description") or "").strip()
     all_text = " ".join([project, description, scope_text, project_in.get("challenge") or ""])
 
-    # project type ("other" can carry the user's own wording)
-    type_key = project_in.get("type") or ""
-    if type_key not in PROJECT_TYPES:
-        type_key = detect_type(all_text) or "other"
+    # project type(s): the team may pick several; the first is the main one. "other" carries their own wording.
+    chosen = [k for k in dict.fromkeys(project_in.get("types") or [project_in.get("type")]) if k in PROJECT_TYPES]
+    type_key = chosen[0] if chosen else (detect_type(all_text) or "other")
     ptype = dict(PROJECT_TYPES[type_key])
     type_other = (project_in.get("type_other") or "").strip()
     if type_key == "other" and type_other:
         ptype.update(label=type_other, nature=f"{type_other} {{li_client}}", nature_short=type_other)
-    secondary = []
+    secondary = [k for k in chosen[1:]]
+    if len(chosen) > 1:
+        labels = [type_other if k == "other" and type_other else PROJECT_TYPES[k]["label"] for k in chosen if k != "other" or type_other]
+        ptype["label"] = ar.join(labels)
+        ptype["default_days"] = max(PROJECT_TYPES[k]["default_days"] for k in chosen)
+        ptype["default_services"] = list(dict.fromkeys(x for k in chosen for x in PROJECT_TYPES[k]["default_services"]))
     for key, t in PROJECT_TYPES.items():
-        if key == type_key or key == "other":
+        if key in (type_key, "other") or key in secondary:
             continue
         if sum(1 for kw in t["keywords"] if ar.normalize(kw) in ar.normalize(all_text)) >= 2:
             secondary.append(key)
@@ -353,7 +358,8 @@ def analyze(inputs: dict, library: dict[str, list[dict]]) -> Analysis:
                                     measures=obj["measures"], target=extract_target(line), source="user"))
     objectives_suggested = not objectives
     if objectives_suggested:
-        for key in DEFAULTS_BY_TYPE.get(type_key, ["awareness"]):
+        default_keys = list(dict.fromkeys(k for t in (chosen or [type_key]) for k in DEFAULTS_BY_TYPE.get(t, ["awareness"])))
+        for key in default_keys[:6]:
             obj = OBJECTIVES[key]
             objectives.append(Objective(key=key, title=obj["label"], statement=_fill(obj["statement"], tokens_ctx),
                                         measures=obj["measures"], target=None, source="suggested"))
@@ -391,6 +397,7 @@ def analyze(inputs: dict, library: dict[str, list[dict]]) -> Analysis:
         show_budget=bool(goals_in.get("show_budget")), tone=prefs.get("tone") if prefs.get("tone") in TONES else "corporate",
         detail=prefs.get("detail") if prefs.get("detail") in DETAILS else "medium", prefs=prefs, event_noun=event_noun,
         audience_suggested=audience_suggested, segments=segments, extra_platforms=extra_platforms,
+        chosen_types=chosen,
         cities=mentioned_cities(" ".join([project, description, prefs.get("requirements") or "", project_in.get("location") or ""])),
     )
 

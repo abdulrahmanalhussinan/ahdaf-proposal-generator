@@ -870,7 +870,8 @@ def build_activations(w: Writer, rng, tone):
     a = w.a
     concept = w.ctx.get("concept") or _concept(w, rng)["name"]
     pool = [dict(x) for x in I.SECTOR_ACTIVATIONS.get(a.sector_key, I.SECTOR_ACTIVATIONS["general"])]
-    pool += [dict(x) for x in I.TYPE_ACTIVATIONS.get(a.type_key, I.TYPE_ACTIVATIONS["other"])]
+    for t in [a.type_key] + [t for t in a.chosen_types[1:]]:
+        pool += [dict(x) for x in I.TYPE_ACTIVATIONS.get(t, I.TYPE_ACTIVATIONS["other"])]
     pool = w.shuffled(rng, pool)
     count = {"brief": 4, "medium": 6, "advanced": 8}[a.detail]
     items = []
@@ -964,7 +965,7 @@ def _enabled_sections(a: Analysis, library: dict) -> list[str]:
             continue
         if sec == "past_projects" and not a.prefs.get("include_past_projects"):
             continue
-        if sec == "content_plan" and a.type_key not in CONTENT_TYPES:
+        if sec == "content_plan" and not CONTENT_TYPES & set(a.chosen_types or [a.type_key]):
             continue
         out.append(sec)
     return out
@@ -1067,6 +1068,7 @@ def build_meta(a: Analysis) -> dict:
         "missing": a.missing,
         "suggested": a.suggested,
         "type": a.type_key,
+        "types": a.chosen_types or [a.type_key],
         "type_label": a.ptype["label"],
         "sector": a.sector_key,
         "sector_label": a.sector.get("name", ""),

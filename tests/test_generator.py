@@ -238,3 +238,25 @@ def test_every_design_exports_to_powerpoint(design, library, settings):
     assert doc["theme"] == design
     data = build_pptx({"doc": doc, "number": "AHD-T"}, settings)
     assert len([n for n in zipfile.ZipFile(io.BytesIO(data)).namelist() if n.startswith("ppt/slides/slide")]) > 15
+
+
+def test_several_project_types_make_one_combined_proposal(library, settings):
+    from app.generator.analyzer import analyze
+    inputs = make_inputs(project={"type": "event", "types": ["event", "influencer", "social_media"], "platforms": []})
+    a = analyze(inputs, library)
+    assert a.type_key == "event" and a.chosen_types == ["event", "influencer", "social_media"]
+    assert a.secondary_types[:2] == ["influencer", "social_media"]
+    assert "فعالية" in a.ptype["label"] and "مشاهير" in a.ptype["label"]
+    out = engine.generate(inputs, library, settings, seed=4)
+    types = [s["type"] for s in out["doc"]["sections"]]
+    assert "content_plan" in types  # social media is one of the chosen types
+    assert out["meta"]["types"] == ["event", "influencer", "social_media"]
+    services = set(out["meta"]["service_labels"])
+    one = engine.generate(make_inputs(project={"type": "event", "types": ["event"], "platforms": []}), library, settings, seed=4)
+    assert services > set(one["meta"]["service_labels"])  # the other types bring their usual services
+
+
+def test_single_type_from_older_proposals_still_works(library, settings):
+    from app.generator.analyzer import analyze
+    a = analyze(make_inputs(project={"type": "branding"}), library)
+    assert a.type_key == "branding" and a.chosen_types == ["branding"]
