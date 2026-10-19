@@ -2,19 +2,21 @@
 // (idea, audience, objectives, services, timeline...) and everything stays editable afterwards.
 import { html, useEffect, useState } from '../vendor/preact-htm.js';
 import { api } from '../lib/api.js';
-import { navigate, toast, toastError, useStore, confirmDialog } from '../lib/store.js';
+import { navigate, toast, toastError, useStore, confirmDialog, link, hrefOf } from '../lib/store.js';
 import { Btn, Icon, Field, Input, TextArea, Select, Seg, ImagePicker, setTitle, Spinner } from '../components/ui.js';
+import { STATIC } from '../lib/env.js';
 import { DesignPicker, DESIGN_KEYS } from '../components/designs.js';
 import { REUSE_KEY } from './actions.js';
 
 const DRAFT_KEY = 'ahdaf.wizard.draft.v2';
 const STEPS = [
-  { title: 'التصميم', desc: 'اختر شكل العرض الفني. تقدر تغيّره لاحقًا من المحرر.' },
-  { title: 'المشروع', desc: 'المعلومات الأساسية فقط، والنظام يكمل الباقي.' },
+  { title: 'التصميم والحجم', desc: 'اختر شكل العرض وعدد صفحاته. تقدر تغيّرها لاحقًا.' },
+  { title: 'المشروع', desc: 'الأساسيات وفكرتك، أو طلبك بالتفصيل. الذكاء الاصطناعي يبني عليها العرض.' },
   { title: 'اقتراحاتك', desc: 'كلها اختيارية: ما تتركه يقترحه النظام بنفسه.' },
 ];
 const PLATFORM_TYPES = ['social_media', 'content', 'influencer', 'digital_ads', 'campaign'];
 const EVENT_TYPES = ['event', 'exhibition'];
+const PAGE_OPTIONS = [10, 15, 20, 25, 30];
 const DURATIONS = [
   { value: '2w', label: 'أسبوعان', v: 2, u: 'week' }, { value: '1m', label: 'شهر', v: 1, u: 'month' },
   { value: '2m', label: 'شهران', v: 2, u: 'month' }, { value: '3m', label: '3 أشهر', v: 3, u: 'month' },
@@ -22,12 +24,12 @@ const DURATIONS = [
 ];
 
 const empty = () => ({
-  client: { name: '', sector: '', logo: null, profile: null },
-  project: { name: '', type: '', type_other: '', description: '', audience: [], audience_other: '', platforms: [], platforms_other: '', event_date: '' },
+  client: { name: '', sector: '', about: '', logo: null, profile: null },
+  project: { name: '', type: '', type_other: '', description: '', brief: '', audience: [], audience_other: '', platforms: [], platforms_other: '', event_date: '' },
   services: { selected: [], other: '' },
   timeline: { duration_value: '', duration_unit: 'month', start_date: '' },
   goals: { objective_keys: [], objectives: '' },
-  preferences: { design: 'ahdaf', tone: 'corporate', tone_other: '', detail: 'medium', layout: 'landscape', include_about: true, dividers: true, requirements: '', celebrities: 'auto', extra_sections: [] },
+  preferences: { design: 'ahdaf', pages: '', tone: 'corporate', tone_other: '', detail: 'medium', layout: 'landscape', include_about: true, dividers: true, requirements: '', celebrities: 'auto', extra_sections: [] },
 });
 
 function merge(base, extra) {
@@ -187,7 +189,11 @@ export function Wizard({ params, query }) {
       </aside>
       <section class="card-ui wiz-card">
         <div class="step-h"><div><div class="k">الخطوة ${step + 1}</div><h2>${S.title}</h2><p>${S.desc}</p></div></div>
-        ${step === 0 && html`<${DesignPicker} value=${data.preferences.design} onChange=${(k) => set('preferences', 'design', k)} />`}
+        ${!meta?.ai?.enabled && html`<${AiOff} />`}
+        ${step === 0 && html`<div class="stack" style="gap:22px">
+          <${DesignPicker} value=${data.preferences.design} onChange=${(k) => set('preferences', 'design', k)} />
+          <${PagesPicker} value=${data.preferences.pages} onChange=${(v) => set('preferences', 'pages', v)} />
+        </div>`}
         ${step === 1 && html`<${StepProject} data=${data} set=${set} meta=${meta} lib=${lib} errors=${errors} setData=${setData} />`}
         ${step === 2 && html`<${StepSuggest} data=${data} set=${set} meta=${meta} lib=${lib} />`}
         <div class="wiz-nav">
@@ -202,6 +208,26 @@ export function Wizard({ params, query }) {
     </div>
     ${gen && html`<${Generating} ...${gen} />`}
   </div>`;
+}
+
+function AiOff() {
+  return html`<div class="notice warn" style="margin-bottom:18px"><${Icon} name="alert" /><div><b>الذكاء الاصطناعي غير مفعّل الآن.</b>
+    ${STATIC ? ' بدونه يُكتب العرض بنصوص جاهزة تتشابه بين العملاء. ضع مفتاح Claude من الإعدادات ليكتب العرض من فكرتك.'
+    : ' بدونه يُكتب العرض بنصوص جاهزة تتشابه بين العملاء. شغّل Claude Code على هذا الجهاز (أو أضف مفتاح API) ثم أعد تشغيل النظام.'}
+    <a href=${hrefOf('/settings')} onClick=${(e) => link(e, '/settings')} style="margin-inline-start:6px;font-weight:700">الإعدادات</a></div></div>`;
+}
+
+function PagesPicker({ value, onChange }) {
+  const custom = !!value && !PAGE_OPTIONS.includes(Number(value));
+  const [open, setOpen] = useState(custom);
+  return html`<div class="field"><span class="lbl">عدد صفحات العرض</span>
+    <div class="chips">
+      <button type="button" class=${`chip ${!value && !open ? 'on' : ''}`} onClick=${() => { setOpen(false); onChange(''); }}>تلقائي</button>
+      ${PAGE_OPTIONS.map((n) => html`<button type="button" class=${`chip ${Number(value) === n && !open ? 'on' : ''}`} onClick=${() => { setOpen(false); onChange(n); }}>${n} صفحة</button>`)}
+      <button type="button" class=${`chip ${open ? 'on' : ''}`} onClick=${() => setOpen(!open)}><${Icon} name=${open ? 'check' : 'plus'} size=${14} />عدد آخر</button>
+    </div>
+    ${open && html`<input class="input" type="number" min="5" max="80" style="max-width:140px;margin-top:8px" value=${value} placeholder="مثال: 18" onInput=${(e) => onChange(e.target.value ? Number(e.target.value) : '')} />`}
+    <span class="hint">يحدد النظام حجم كل قسم ومستوى التفصيل ليقترب العرض من هذا العدد، وتظهر لك الصفحات الفعلية في المحرر مع زر «ملاءمة» إن زادت.</span></div>`;
 }
 
 function Generating({ stage, ai, sec }) {
@@ -251,9 +277,18 @@ function StepProject({ data, set, meta, lib, errors, setData }) {
       ${p.type === 'other' && html`<input class="input" style="margin-top:8px" value=${p.type_other} onInput=${(e) => set('project', 'type_other', e.target.value)} placeholder="اكتب نوع المشروع، مثل: رحلة تعريفية للإعلاميين" />`}
       ${errors.type && html`<span class="err">${errors.type}</span>`}
     </div>
-    <${Field} label="فكرتك أو توجيهك" optional hint="اكتبها بكلامك ولو كلمتين. النظام يبني عليها ويطورها ويقترح الباقي، ولا ينسخها كما هي في العرض.">
-      <${TextArea} value=${p.description} onInput=${(v) => set('project', 'description', v)} minRows=${3} placeholder="مثال: نركز على الرياض ونجيب مشاهير، ونبي شي يخلي الناس تزور الفروع." />
+    <${Field} label="نشاط العميل" optional hint="وش يسوي العميل وش يميزه؟ بكلامك، والذكاء الاصطناعي يفهمه ويبني عليه بدل الكلام العام عن القطاع.">
+      <input class="input" value=${c.about || ''} onInput=${(e) => set('client', 'about', e.target.value)} placeholder="مثال: سلسلة مقاهي مختصة عندها 4 فروع في شمال الرياض، تحمّص قهوتها بنفسها." />
     </${Field}>
+    <div class="field"><span class="lbl">كيف تبي تعطيني المشروع؟</span>
+      <${Seg} value=${p.brief_mode || (p.brief ? 'detailed' : 'idea')} onChange=${(v) => set('project', 'brief_mode', v)}
+        options=${[{ value: 'idea', label: 'فكرة مختصرة والنظام يكمل' }, { value: 'detailed', label: 'أكتب طلبي بالتفصيل' }]} /></div>
+    <${Field} label="فكرتك أو توجيهك" optional hint="اكتبها بكلامك ولو كلمتين. النظام يبني عليها ويطورها ويقترح الباقي، ولا ينسخها كما هي في العرض.">
+      <${TextArea} value=${p.description} onInput=${(v) => set('project', 'description', v)} minRows=${2} placeholder="مثال: نركز على الرياض ونجيب مشاهير، ونبي شي يخلي الناس تزور الفروع." />
+    </${Field}>
+    ${(p.brief_mode || (p.brief ? 'detailed' : 'idea')) === 'detailed' && html`<${Field} label="طلبك بالتفصيل" hint="اكتب بالضبط وش تبي: الأقسام، الأفكار، الأماكن، الأعداد، أي شي. يلتزم به العرض حرفيًا، ويكمل الذكاء الاصطناعي الباقي ويبني عليه. لو طلبت قسمًا غير موجود يضيفه.">
+      <${TextArea} value=${p.brief} onInput=${(v) => set('project', 'brief', v)} minRows=${7} placeholder=${'مثال:\nأبي العرض يركز على افتتاح فرعين في الرياض خلال رمضان.\nثلاث فعاليات في بوليفارد وفي الفروع، و5 مشاهير لايف ستايل.\nأبي قسم عن تجربة العميل داخل الفرع، وقسم عن العروض الرمضانية.\nالتصوير يكون في الفرع ومع الباريستا.'} />
+    </${Field}>`}
     <${Field} label="الملف التعريفي للعميل" optional hint="PDF أو Word أو PowerPoint. يقرأه النظام ويفهم منه العميل وخدماته وجمهوره.">
       <${ProfilePicker} value=${c.profile} onChange=${(v) => set('client', 'profile', v)} />
     </${Field}>
@@ -328,7 +363,7 @@ function StepSuggest({ data, set, meta, lib }) {
         <${ChipsOther} multi=${false} options=${(meta?.tones || []).map((x) => ({ value: x.key, label: x.label }))} value=${pr.tone_other ? '' : pr.tone}
           onChange=${(v) => set('preferences', 'tone', v || 'corporate')} other=${pr.tone_other} onOther=${(v) => set('preferences', 'tone_other', v)} placeholder="صف الأسلوب الذي تريده" />
       </${Field}>
-      <div class="field"><span class="lbl">مستوى التفصيل</span><${Seg} value=${pr.detail} onChange=${(v) => set('preferences', 'detail', v)} options=${(meta?.details || []).map((d) => ({ value: d.key, label: d.label }))} /></div>
+      <div class="field"><span class="lbl">مستوى التفصيل</span>${pr.pages ? html`<span class="hint">يُحدد تلقائيًا من عدد الصفحات (${pr.pages} صفحة).</span>` : html`<${Seg} value=${pr.detail} onChange=${(v) => set('preferences', 'detail', v)} options=${(meta?.details || []).map((d) => ({ value: d.key, label: d.label }))} />`}</div>
     </div>
     <div class="row">
       <div class="field"><span class="lbl">المشاهير</span>

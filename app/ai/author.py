@@ -40,7 +40,7 @@ PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 # Sections Claude writes. Everything else (cover facts, «عن أهداف», budget, past projects) is not his to write.
 WRITABLE = ["intro", "understanding", "objectives", "idea", "activations", "celebrities", "content_plan", "scope",
-            "methodology", "deliverables", "kpis", "conclusion", "team", "governance", "assumptions", "risks"]
+            "methodology", "deliverables", "kpis", "conclusion", "team", "governance", "assumptions", "risks", "custom"]
 ROLES = ["plan", "prepare", "execute", "event_day", "optimize", "report"]
 # Writing happens in two stages so it takes minutes, not many minutes: first the creative core (the
 # idea and the activations built on it), then the rest in parallel calls that all build on that core.
@@ -115,6 +115,7 @@ def _obj(props: dict) -> dict:
 
 
 TITLED = _obj({"title": _s(), "text": _s()})
+CUSTOM = _obj({"title": _s(), "subtitle": _s(), "paragraphs": _arr(_s()), "points": _arr(_s()), "cards": _arr(TITLED)})
 SECTION_SCHEMAS = {
     "intro": _obj({"subtitle": _s(), "lead": _s(), "paragraphs": _arr(_s())}),
     "understanding": _obj({"subtitle": _s(), "paragraphs": _arr(_s()), "cards": _arr(TITLED), "insight": _s()}),
@@ -130,7 +131,8 @@ SECTION_SCHEMAS = {
     "scope": _obj({"subtitle": _s(), "intro": _s(), "groups": _arr(_obj({"title": _s(), "items": _arr(TITLED)}))}),
     "methodology": _obj({"subtitle": _s(), "intro": _s(), "phases": _arr(_obj({
         "title": _s(), "role": {"type": "string", "enum": ROLES}, "weight": {"type": "integer", "description": "الوزن النسبي لمدة المرحلة من 1 إلى 10"},
-        "goal": _s(), "activities": _arr(_s()), "outputs": _arr(_s()), "owner": _s("المسؤول، مثل: مدير المشروع، فريق المحتوى")}))}),
+        "goal": _s(), "activities": _arr(_s()), "outputs": _arr(_s()), "owner": _s("المسؤول، مثل: مدير المشروع، فريق المحتوى")})),
+        "timeline_subtitle": _s(), "timeline_intro": _s()}),
     "deliverables": _obj({"subtitle": _s(), "intro": _s(), "rows": _arr(_obj({
         "title": _s(), "description": _s(), "qty": {"type": ["integer", "null"]}, "unit": _s(), "timing": _s()}))}),
     "kpis": _obj({"subtitle": _s(), "intro": _s(), "items": _arr(_obj({"name": _s(), "definition": _s(), "measurement": _s(),
@@ -140,6 +142,8 @@ SECTION_SCHEMAS = {
                                                                           "responsibilities": _arr(_s())}))}),
     "governance": _obj({"subtitle": _s(), "intro": _s(), "cards": _arr(TITLED)}),
     "assumptions": _obj({"subtitle": _s(), "intro": _s(), "items": _arr(_s())}),
+    "custom": CUSTOM,
+    "custom_sections": _arr(CUSTOM),
     "risks": _obj({"subtitle": _s(), "intro": _s(), "rows": _arr(_obj({
         "risk": _s(), "likelihood": {"type": "string", "enum": ["مرتفعة", "متوسطة", "منخفضة"]},
         "impact": {"type": "string", "enum": ["مرتفع", "متوسط", "منخفض"]}, "mitigation": _s()}))}),
@@ -154,7 +158,9 @@ GUIDE = {
     "celebrities": "اختر حتى {celebrities} أشخاص من «قائمة المرشحين» فقط، الأنسب للفكرة والمدينة والجمهور، واكتب ref بالمعرّف كما هو. role: دوره في الحملة. content: المحتوى المحدد المقترح له. why: لماذا هو (من بيانات القائمة، دون أرقام من عندك). criteria: 3 أو 4 معايير اخترنا بها.",
     "content_plan": "pillars: {pillars} محاور محتوى، لكل محور text يشرح هدفه و examples من 2 إلى 3 أفكار منشورات محددة. week: نموذج أسبوع من الأحد إلى السبت (7 صفوف) بمحتوى محدد مرتبط بالفكرة، والمنصات من منصات المشروع.",
     "scope": "groups: من 3 إلى 5 مجموعات تغطي كل ما سننفذه (مثل: الاستراتيجية، المحتوى والإنتاج، المشاهير، التفعيلات، الإعلانات، القياس). لكل بند text محدد بهذا المشروع.",
-    "methodology": "phases: من {phases} مراحل مرتبة زمنيًا، أسماؤها خاصة بهذا المشروع. role من القائمة المسموحة، weight وزن نسبي لطول المرحلة، goal، activities من 3 إلى 5 أنشطة محددة، outputs، owner.",
+    "methodology": "phases: من {phases} مراحل مرتبة زمنيًا، أسماؤها خاصة بهذا المشروع. role من القائمة المسموحة، weight وزن نسبي لطول المرحلة، goal، activities من 3 إلى 5 أنشطة محددة، outputs، owner. timeline_subtitle و timeline_intro: سطر وجملتان لقسم الجدول الزمني تصفان إيقاع هذا المشروع تحديدًا.",
+    "custom": "اكتب هذا القسم من جديد بنفس عنوانه وغرضه: paragraphs و points و cards (ما يناسبه منها).",
+    "custom_sections": "أقسام إضافية لكل ما طلبه الفريق صراحةً في «طلب الفريق بالتفصيل» ولا تغطيه الأقسام الأخرى (حتى 3 أقسام)، لكل قسم title واضح ومحتوى كامل. إن لم يطلب شيئًا كهذا فأعد مصفوفة فارغة.",
     "deliverables": "rows: نحو {deliverables} مخرجات ملموسة نسلّمها، بكميات منطقية لمدة المشروع (الكمية رقم صحيح أو null إن لم تكن قابلة للعد)، والوحدة، والتوقيت.",
     "kpis": "{kpis} مؤشرات أداء مرتبطة بالأهداف والفكرة. target: الرقم إن أعطاه الفريق فقط، وإلا «يُحدد مع العميل».",
     "conclusion": "lead: خاتمة خاصة بهذا العرض في جملتين. paragraph: فقرة قصيرة. next_steps: 3 أو 4 خطوات تالية عملية.",
@@ -203,11 +209,12 @@ def _brief(inputs: dict, a, meta: dict) -> str:
     rows = [
         ("العميل", c.get("name")),
         ("القطاع", a.sector.get("name")),
-        ("نبذة عن العميل كتبها الفريق", c.get("about")),
+        ("نشاط العميل كما كتبه الفريق (افهمه وابنِ عليه ولا تنسخه)", c.get("about")),
         ("اسم المشروع", p.get("name")),
         ("نوع المشروع", p.get("type_other") or a.ptype["label"]),
         ("فكرة الفريق وتوجيهه (ابنِ عليها ولا تنسخها)", p.get("description")),
         ("ملاحظات الفريق (راعِها في البناء ولا تنسخها)", pr.get("requirements")),
+        ("طلب الفريق بالتفصيل (أهم مدخل: نفّذ كل ما فيه بدقة، ثم أكمله وابنِ عليه بأفكارك)", p.get("brief")),
         ("الجمهور المستهدف", "، ".join(audience) if audience else "لم يُحدد: اقترحه أنت"),
         ("الأهداف التي اختارها الفريق", "، ".join(objectives) if objectives else "لم تُحدد: اقترحها أنت"),
         ("المنصات", "، ".join(a.platform_labels) or "لم تُحدد: اقترح المناسب"),
@@ -243,15 +250,20 @@ def build_request(inputs: dict, library: dict, settings: dict, meta: dict, secti
     `sections` are section types to write. `concept` is the creative core already written (stage
     one), which these sections must build on. `current` (regeneration) is the section being rewritten,
     so the new version differs from it."""
-    a = analyze(inputs, library)
+    a, _, plan = E.planned(inputs, library)
     if tone and tone in TONES:
         a.tone = tone
         inputs = {**inputs, "preferences": {**(inputs.get("preferences") or {}), "tone": tone, "tone_other": ""}}
     sections = [s for s in sections if s in SECTION_SCHEMAS]
+    if current is None and "conclusion" in sections and ((inputs.get("project") or {}).get("brief") or "").strip():
+        sections.append("custom_sections")
     pool = library.get("celebrities") or []
     if not pool:
         sections = [s for s in sections if s != "celebrities"]
     counts = {**COUNTS[a.detail]}
+    if plan and plan["stretch"] > 1.05:  # more pages than the detail level fills: more of everything
+        for k in ("activations", "objectives", "kpis", "deliverables", "pillars", "cards"):
+            counts[k] = round(counts[k] * plan["stretch"])
     counts["celebrities"] = min(counts["celebrities"], len(pool)) if pool else 0
     profile, doc = _profile_text(inputs)
     parts = [_prompt("author").format(brief=_brief(inputs, a, meta), company=(settings.get("company_about") or "")[:900])]
@@ -268,7 +280,11 @@ def build_request(inputs: dict, library: dict, settings: dict, meta: dict, secti
     if current:
         parts.append("## إعادة كتابة\nهذه هي النسخة الحالية من القسم. اكتب نسخة جديدة مختلفة عنها في الزاوية والصياغة والأفكار، "
                      "ومتسقة مع فكرة العرض:\n" + json.dumps(current, ensure_ascii=False)[:12000])
-    guide = "\n".join(f"- {s}: {GUIDE[s].format(**counts)}" for s in sections)
+    room = (plan or {}).get("per_section", {})
+    guide = "\n".join(f"- {s}: {GUIDE[s].format(**counts)}" + (f" (المساحة: نحو {room[s]} صفحة)" if s in room else "") for s in sections)
+    if plan:
+        parts.append(f"## حجم العرض\nالعرض كاملًا نحو {plan['target']} صفحة (شرائح 16:9). التزم بالمساحة المحددة لكل قسم: "
+                     "لا تزد فيتجاوز العرض العدد المطلوب، ولا تنقص فيبدو فارغًا.")
     parts.append("## المطلوب\nاكتب الأقسام التالية، وكلها مرتبطة بفكرة واحدة واضحة:\n" + guide +
                  "\n- subtitle في كل قسم: سطر قصير جدًا تحت عنوان القسم، خاص بهذا المشروع."
                  + ("\n- cover_subtitle: سطر واحد للغلاف يصف العرض في 12 كلمة أو أقل." if current is None and concept is None else ""))
@@ -573,6 +589,8 @@ def _blocks_for(sec: str, c: dict, w, allowed: set[str], pool: list[dict], ai_ph
             return None
         scheduled = E._schedule(w, phases)
         ai_phases_holder["phases"] = scheduled
+        ai_phases_holder["timeline_intro"] = clean(c.get("timeline_intro"), allowed)
+        ai_phases_holder["timeline_subtitle"] = clean(c.get("timeline_subtitle"), allowed)
         intro = clean(c.get("intro"), allowed)
         return ([blk("paragraph", text=intro)] if intro else []) + [blk("phases", items=E.methodology_items(w, scheduled))]
     if sec == "deliverables":
@@ -628,6 +646,15 @@ def _blocks_for(sec: str, c: dict, w, allowed: set[str], pool: list[dict], ai_ph
             return None
         intro = clean(c.get("intro"), allowed)
         return ([blk("paragraph", text=intro)] if intro else []) + [blk("list", items=items, style="check")]
+    if sec == "custom":
+        blocks = [blk("paragraph", text=t) for t in _texts(c.get("paragraphs"), allowed)]
+        points = _texts(c.get("points"), allowed)
+        if points:
+            blocks.append(blk("list", items=[ar.sentence(x) for x in points], style="check"))
+        cards = _cards(c.get("cards"), allowed)
+        if cards:
+            blocks.append(blk("cards", items=cards, columns=2 if len(cards) <= 4 else 3))
+        return blocks or None
     if sec == "risks":
         rows = [{"id": E._id(), "risk": clean(r.get("risk"), allowed), "likelihood": r.get("likelihood") or "متوسطة",
                  "impact": r.get("impact") or "متوسط", "mitigation": clean(r.get("mitigation"), allowed)}
@@ -643,7 +670,7 @@ def _blocks_for(sec: str, c: dict, w, allowed: set[str], pool: list[dict], ai_ph
 def apply(doc: dict, content: dict, inputs: dict, library: dict, settings: dict, only: list[str] | None = None) -> list[str]:
     """Write Claude's sections into the document. Returns the section types that were replaced;
     anything missing or rejected keeps the rules-engine version."""
-    a = analyze(inputs, library)
+    a = E.planned(inputs, library)[0]
     w = E.Writer(a, library, settings, doc.get("seed", 1))
     allowed = sources_numbers(inputs, library, settings)
     pool = library.get("celebrities") or []
@@ -675,9 +702,25 @@ def apply(doc: dict, content: dict, inputs: dict, library: dict, settings: dict,
         written.append(sec)
     # the timeline follows the phases Claude planned
     if holder.get("phases") and by_type.get("timeline"):
-        by_type["timeline"]["blocks"] = E.timeline_blocks(w, holder["phases"], intro=by_type["timeline"]["blocks"][0].get("text"))
-        by_type["timeline"]["ai"] = True
+        tl = by_type["timeline"]
+        tl["blocks"] = E.timeline_blocks(w, holder["phases"], intro=holder.get("timeline_intro") or tl["blocks"][0].get("text"))
+        if holder.get("timeline_subtitle"):
+            tl["subtitle"] = holder["timeline_subtitle"]
+        tl["ai"] = True
         written.append("timeline")
+    # sections the team asked for in its detailed request that no standard section covers
+    extra = [x for x in (content.get("custom_sections") or []) if isinstance(x, dict)][:3] if only is None else []
+    for c in extra:
+        title = clean(c.get("title"), allowed)
+        blocks = _blocks_for("custom", c, w, allowed, pool, holder) if title else None
+        if not blocks:
+            continue
+        sec = {"id": E._id(), "type": "custom", "title": title, "title_en": "", "subtitle": clean(c.get("subtitle"), allowed),
+               "visible": True, "divider": False, "regen": 0, "tone": a.tone, "blocks": blocks, "ai": True}
+        sections = doc.setdefault("sections", [])
+        at = next((i for i, x in enumerate(sections) if x.get("type") == "conclusion"), len(sections))
+        sections.insert(at, sec)
+        written.append("custom")
     if only is None and clean(content.get("cover_subtitle"), allowed):
         doc["cover"]["subtitle"] = clean(content.get("cover_subtitle"), allowed)
     return written
@@ -696,11 +739,19 @@ def write_document(doc: dict, inputs: dict, library: dict, settings: dict, meta:
         concept = {k: content[k] for k in first if k in content}
         with ThreadPoolExecutor(max_workers=max(1, len(rest))) as pool:
             jobs = [pool.submit(call, build_request(inputs, library, settings, meta, g, concept=concept)) for g in rest]
+            failed = []
             for g, job in zip(rest, jobs):
                 try:
-                    content.update({k: v for k, v in job.result().items() if k in g})
-                except Exception as exc:  # those sections keep the rules-engine text
-                    log.warning("AI sections %s skipped: %s", g, exc)
+                    content.update({k: v for k, v in job.result().items() if k in g or k == "custom_sections"})
+                except Exception as exc:
+                    log.warning("AI sections %s failed, retrying: %s", g, exc)
+                    failed.append(g)
+        for g in failed:
+            try:
+                content.update({k: v for k, v in call(build_request(inputs, library, settings, meta, g, concept=concept)).items()
+                                if k in g or k == "custom_sections"})
+            except Exception as exc:  # those sections keep the rules-engine text
+                log.warning("AI sections %s skipped: %s", g, exc)
         written = apply(doc, content, inputs, library, settings)
         doc["ai"] = {"provider": provider(), "model": status()["model"], "sections": written, "seconds": round(time.time() - started)}
     except Exception as exc:  # generation must never fail because of the writer

@@ -23,6 +23,7 @@ from pptx.util import Emu, Inches, Pt
 from app import config
 
 BRAND = config.WEB_DIR / "assets" / "brand"
+DECO = Path(__file__).resolve().parent / "deco"  # artwork of each design, rendered from web/js/document/art.js
 UPLOADS = config.UPLOAD_DIR
 
 PURPLE, DEEP, NIGHT, MID = "4C0192", "2B0560", "1A033F", "6A1FB0"
@@ -33,23 +34,23 @@ LVL = {"hi": ("FBE6E3", "C0392B"), "md": ("FDF3DC", "9A6412"), "lo": ("E6F4EC", 
 
 # The four proposal designs (doc.theme). T holds the active palette while a deck is built.
 THEMES = {
-    "ahdaf": dict(bg=WHITE, title=PURPLE, kicker=MID, sub=MUTED, text=INK, strong=DEEP, muted=MUTED, line=LINE, num=PURPLE,
+    "ahdaf": dict(key="ahdaf", align="r", bg=WHITE, title=PURPLE, kicker=MID, sub=MUTED, text=INK, strong=DEEP, muted=MUTED, line=LINE, num=PURPLE,
                   card=LILAC, card_line=None, card_bar=False, card_title=PURPLE, card_text=INK2, callout=PURPLE, callout_text=WHITE,
                   head_bg=PURPLE, head_text=WHITE, row=WHITE, row_alt="FBF9FE", logo_page="logo-purple.png", band=False,
                   cover_bg=PURPLE, cover_text=WHITE, cover_sub="EDE3FF", cover_label="CDB8F2", logo_cover="logo-white.png",
                   mark_cover="mark-white.png", cover_split=False, deco=True),
-    "night": dict(bg="14022E", title=WHITE, kicker="C6A0FF", sub="B6A9CF", text="EEE7FB", strong="E6D6FF", muted="B6A9CF",
-                  line="3A2466", num="C6A0FF", card="241048", card_line="3D2470", card_bar=False, card_title="E6D6FF",
-                  card_text="D6CBEA", callout=PURPLE, callout_text=WHITE, head_bg=PURPLE, head_text=WHITE, row="1A0638",
-                  row_alt="21093F", logo_page="logo-white.png", band=False, cover_bg="1A033F", cover_text=WHITE,
-                  cover_sub="E3D6FA", cover_label="C6A0FF", logo_cover="logo-white.png", mark_cover="mark-white.png",
+    "night": dict(key="night", align="ctr", bg="110E33", title=WHITE, kicker="E6C989", sub="B9B3D6", text="ECE8F8", strong="F0DDB0",
+                  muted="A9A2C8", line="3A3366", num="E6C989", card="1C1848", card_line="5A4C33", card_bar=False, card_title="F0DDB0",
+                  card_text="D9D4EE", callout="2A2068", callout_text=WHITE, head_bg="2A2068", head_text="F0DDB0", row="15123B",
+                  row_alt="1A1744", logo_page="logo-white.png", band=False, cover_bg="120F38", cover_text=WHITE,
+                  cover_sub="E3DDF5", cover_label="E6C989", logo_cover="logo-white.png", mark_cover="mark-white.png",
                   cover_split=False, deco=False),
-    "bold": dict(bg=WHITE, title=WHITE, kicker="D9C2FF", sub="E6D6FF", text=INK, strong=DEEP, muted=MUTED, line=LINE, num=PURPLE,
+    "bold": dict(key="bold", align="r", bg=WHITE, title=WHITE, kicker="D9C2FF", sub="E6D6FF", text=INK, strong=DEEP, muted=MUTED, line=LINE, num=PURPLE,
                  card=WHITE, card_line="E2D6F5", card_bar=True, card_title=PURPLE, card_text=INK2, callout=DEEP, callout_text=WHITE,
                  head_bg=DEEP, head_text=WHITE, row=WHITE, row_alt="FBF9FE", logo_page="logo-white.png", band=True,
                  cover_bg=PURPLE, cover_text=WHITE, cover_sub="EDE3FF", cover_label="CDB8F2", logo_cover="logo-white.png",
                  mark_cover="mark-white.png", cover_split=True, deco=False),
-    "minimal": dict(bg=WHITE, title=PURPLE, kicker=MID, sub=MUTED, text=INK, strong=DEEP, muted=MUTED, line=LINE, num=PURPLE,
+    "minimal": dict(key="minimal", align="ctr", bg=WHITE, title=PURPLE, kicker=MID, sub=MUTED, text=INK, strong=DEEP, muted=MUTED, line=LINE, num=PURPLE,
                     card=WHITE, card_line=LINE, card_bar=False, card_title=PURPLE, card_text=INK2, callout=LILAC, callout_text=INK,
                     head_bg=WHITE, head_text=PURPLE, row=WHITE, row_alt=WHITE, logo_page="logo-purple.png", band=False,
                     cover_bg=WHITE, cover_text=PURPLE, cover_sub=MUTED, cover_label=MUTED, logo_cover="logo-purple.png",
@@ -256,21 +257,27 @@ def th(text, width_in, pt, lh=1.38) -> float:
 
 
 # ---------------------------------------------------------------------- slide chrome
+def deco(d: Deck, s, kind: str):
+    d.pic(s, DECO / f"{T['key']}-{kind}.png", 0, 0, w=SW, h=SH)
+
+
 def content_slide(d: Deck, section: dict, num: str, first: bool, ctx: dict):
     s = d.slide(T["bg"])
+    deco(d, s, "content")
     if T["band"]:
         d.rect(s, 0, 0, SW, 1.52 if first else 1.12, PURPLE, radius=0)
     d.pic(s, BRAND / T["logo_page"], X0, 0.5, h=0.36)
     if ctx.get("client_logo"):
         d.pic(s, ctx["client_logo"], X0 + 1.55, 0.48, h=0.4)
-    tx, tw = 3.4, SW - 3.4 - X0
+    al = T["align"]
+    tx, tw = (2.6, SW - 5.2) if al == "ctr" else (3.4, SW - 3.4 - X0)
     if first:
-        d.text(s, tx, 0.28, tw, 0.28, [{"text": f"{num}  ·  {section.get('title_en') or ''}".strip(" ·"), "size": 10.5, "color": T["kicker"]}], margin=0)
-        d.text(s, tx, 0.52, tw, 0.62, [{"text": section.get("title", ""), "size": 28, "bold": True, "color": T["title"], "line": 1.0}], margin=0)
+        d.text(s, tx, 0.28, tw, 0.28, [{"text": f"{num}  ·  {section.get('title_en') or ''}".strip(" ·"), "size": 10.5, "color": T["kicker"], "align": al}], margin=0)
+        d.text(s, tx, 0.52, tw, 0.62, [{"text": section.get("title", ""), "size": 28, "bold": True, "color": T["title"], "line": 1.0, "align": al}], margin=0)
         if section.get("subtitle"):
-            d.text(s, tx, 1.12, tw, 0.36, [{"text": section["subtitle"], "size": 12.5, "color": T["sub"]}], margin=0)
+            d.text(s, tx, 1.12, tw, 0.36, [{"text": section["subtitle"], "size": 12.5, "color": T["sub"], "align": al}], margin=0)
     else:
-        d.text(s, tx, 0.48, tw, 0.5, [{"text": f"{section.get('title', '')}  (تابع)", "size": 18, "bold": True, "color": T["title"] if T["band"] else T["strong"]}], margin=0)
+        d.text(s, tx, 0.48, tw, 0.5, [{"text": f"{section.get('title', '')}  (تابع)", "size": 18, "bold": True, "color": T["title"] if T["band"] else T["strong"], "align": al}], margin=0)
     d.rect(s, X0, 7.02, CW, 0.012, T["line"], radius=0)
     d.text(s, X0, 7.06, 1.0, 0.3, [{"text": f"{d.page:02d}", "size": 10.5, "bold": True, "color": T["num"], "align": "l"}], margin=0)
     d.text(s, SW - X0 - 7, 7.06, 7, 0.3, [{"text": ctx["footer"], "size": 9.5, "color": T["muted"]}], margin=0)
@@ -286,14 +293,17 @@ def purple_bg(d: Deck, s, image=None):
     if T["cover_split"]:
         d.rect(s, 0, 0, SW * 0.4, SH, WHITE, radius=0)
         d.pic(s, BRAND / "mark-purple.png", 1.0, 1.9, h=3.6)
-    else:
+    elif T["key"] != "night":
         d.pic(s, BRAND / T["mark_cover"], -0.9, 3.4, h=5.2, alpha=0.08)
+    deco(d, s, "cover")
 
 
 def cover_slide(d: Deck, doc: dict, settings: dict, number: str):
     c = doc.get("cover") or {}
     s = d.slide(T["cover_bg"])
     purple_bg(d, s, _local(c.get("image")))
+    if T["align"] == "ctr":
+        return centred_cover(d, s, c, settings, number)
     d.pic(s, BRAND / T["logo_cover"], SW - X0 - 2.1, 0.7, h=0.58)
     if _local(c.get("client_logo")):
         d.rect(s, X0, 0.62, 2.0, 0.74, WHITE, radius=0.12, line=LINE)
@@ -317,9 +327,33 @@ def cover_slide(d: Deck, doc: dict, settings: dict, number: str):
         d.text(s, X0, 6.43, 2.4, 0.3, [{"text": settings.get("tagline", "نربط الإبداع بالهدف"), "size": 10.5, "color": T["cover_label"], "align": "l"}], margin=0)
 
 
+def centred_cover(d: Deck, s, c: dict, settings: dict, number: str):
+    d.pic(s, BRAND / T["logo_cover"], SW / 2 - 1.05, 0.7, h=0.58)
+    d.text(s, 1.2, 2.3, SW - 2.4, 0.4, [{"text": c.get("kicker") or "عرض فني", "size": 15, "color": T["cover_label"], "align": "ctr"}], margin=0)
+    d.text(s, 1.2, 2.7, SW - 2.4, 1.4, [{"text": c.get("title", ""), "size": 46, "bold": True, "color": T["cover_text"], "line": 1.0, "align": "ctr"}], margin=0)
+    if c.get("subtitle"):
+        d.text(s, 2.2, 4.05, SW - 4.4, 0.9, [{"text": c["subtitle"], "size": 17, "color": T["cover_sub"], "align": "ctr"}], margin=0)
+    cols = [("مقدم إلى", c.get("client", "")), ("مقدم من", c.get("prepared_by") or settings.get("company_name", "")),
+            ("التاريخ", c.get("date", "")), ("النسخة", f"{c.get('version', '1.0')} · {number}")]
+    colw, gap = 2.5, 0.2
+    x0 = (SW - (len(cols) * colw + (len(cols) - 1) * gap)) / 2
+    d.rect(s, x0, 6.0, SW - 2 * x0, 0.01, T["cover_label"], radius=0)
+    for i, (k, v) in enumerate(cols):
+        x = SW - x0 - (i + 1) * colw - i * gap
+        d.text(s, x, 6.15, colw, 0.3, [{"text": k, "size": 10.5, "color": T["cover_label"], "align": "ctr"}], margin=0)
+        d.text(s, x, 6.43, colw, 0.5, [{"text": v, "size": 12, "bold": True, "color": T["cover_text"], "align": "ctr"}], margin=0)
+
+
 def divider_slide(d: Deck, section: dict, num: str):
     s = d.slide(T["cover_bg"])
     purple_bg(d, s, _local(section.get("image")))
+    if T["align"] == "ctr":
+        d.pic(s, BRAND / T["logo_cover"], SW / 2 - 0.75, 0.6, h=0.4)
+        d.text(s, 1.5, 1.9, SW - 3, 1.1, [{"text": num, "size": 64, "bold": True, "color": T["cover_label"], "align": "ctr", "line": 1.0}], margin=0)
+        d.text(s, 1.5, 3.05, SW - 3, 1.2, [{"text": section.get("title", ""), "size": 48, "bold": True, "color": T["cover_text"], "line": 1.0, "align": "ctr"}], margin=0)
+        if section.get("subtitle"):
+            d.text(s, 2.5, 4.3, SW - 5, 0.8, [{"text": section["subtitle"], "size": 18, "color": T["cover_sub"], "align": "ctr"}], margin=0)
+        return
     d.pic(s, BRAND / T["logo_cover"], X0, 0.6, h=0.4)
     left = SW * 0.4 + 0.3 if T["cover_split"] else X0
     d.text(s, left, 2.55, SW - left - X0, 0.45, [{"text": num, "size": 17, "color": T["cover_label"]}], margin=0)
@@ -330,8 +364,9 @@ def divider_slide(d: Deck, section: dict, num: str):
 
 def closing_slide(d: Deck, doc: dict, settings: dict):
     s = d.slide(T["cover_bg"])
-    if T["cover_bg"] != WHITE:
+    if T["cover_bg"] != WHITE and T["key"] != "night":
         d.pic(s, BRAND / T["mark_cover"], -0.9, 3.4, h=5.2, alpha=0.08)
+    deco(d, s, "cover")
     d.pic(s, BRAND / T["logo_cover"], SW / 2 - 1.7, 1.4, h=0.95)
     d.text(s, 1.5, 2.55, SW - 3, 0.4, [{"text": settings.get("tagline", "نربط الإبداع بالهدف"), "size": 16, "color": T["cover_label"], "align": "ctr"}], margin=0)
     d.text(s, 1.5, 3.3, SW - 3, 1.0, [{"text": "شكرًا لكم", "size": 44, "bold": True, "color": T["cover_text"], "align": "ctr"}], margin=0)

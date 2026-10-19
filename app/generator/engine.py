@@ -16,6 +16,7 @@ import uuid
 from datetime import date, timedelta
 
 from app.core import arabic as ar
+from app.generator import pages as PAGES
 from app.generator import phrases as P
 from app.generator.analyzer import DETAILS, TONES, Analysis, analyze
 from app.generator.knowledge import ideas as I
@@ -985,16 +986,28 @@ def build_cover(a: Analysis, settings: dict, w: Writer, today: date | None = Non
     }
 
 
-def generate(inputs: dict, library: dict, settings: dict, seed: int | None = None, today: date | None = None) -> dict:
+def planned(inputs: dict, library: dict) -> tuple[Analysis, list[str], dict | None]:
+    """Analysis + the sections to write, sized to the requested number of pages (if any)."""
     a = analyze(inputs, library)
+    base = _enabled_sections(a, library)
+    target = PAGES.target_of(a.prefs)
+    if not target:
+        return a, base, None
+    plan = PAGES.plan(target, base, [s for s in ("content_plan",) if s not in base])
+    a.detail = plan["detail"]
+    return a, plan["sections"], plan
+
+
+def generate(inputs: dict, library: dict, settings: dict, seed: int | None = None, today: date | None = None) -> dict:
+    a, enabled, plan = planned(inputs, library)
     seed = seed if seed is not None else random.randint(1, 10_000_000)
     w = Writer(a, library, settings, seed)
     sections = []
-    for sec in _enabled_sections(a, library):
+    for sec in enabled:
         rng = w.rng(sec, 0)
         blocks = BUILDERS[sec](w, rng, None)
         sections.append(_section(sec, w, rng, blocks, 0, None))
-    if not a.prefs.get("dividers", True):
+    if not a.prefs.get("dividers", True) or (plan and not plan["dividers"]):
         for s in sections:
             s["divider"] = False
     doc = {
@@ -1006,13 +1019,15 @@ def generate(inputs: dict, library: dict, settings: dict, seed: int | None = Non
         "tone": a.tone,
         "detail": a.detail,
     }
+    if plan:
+        doc["target_pages"] = plan["target"]
     return {"doc": doc, "meta": build_meta(a)}
 
 
 def regenerate_section(inputs: dict, doc: dict, section_id: str, library: dict, settings: dict,
                        tone: str | None = None) -> dict:
     """Rebuild one section with the next variation; other sections are untouched."""
-    a = analyze(inputs, library)
+    a = planned(inputs, library)[0]
     if tone and tone in TONES:
         a.tone = tone
     current = next((s for s in doc.get("sections", []) if s["id"] == section_id), None)

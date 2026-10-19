@@ -154,6 +154,7 @@ export function Editor({ params }) {
       <a class="btn ghost icon" href=${hrefOf('/proposals')} onClick=${(e) => link(e, '/proposals')} aria-label="رجوع"><${Icon} name="arrowRight" /></a>
       <div class="ttl"><b title=${p.project_name}>${doc.cover?.title || p.project_name}</b><span>${p.client_name} · <span class="ltr">${p.number}</span> · نسخة ${doc.cover?.version || p.version}</span></div>
       <${Select} value=${p.status} onChange=${setStatus} options=${Object.entries(STATUS).map(([k, v]) => ({ value: k, label: v.label }))} style="width:auto;padding-top:6px;padding-bottom:6px" aria-label="حالة العرض" />
+      <${PageBadge} p=${p} settings=${settings} updateDoc=${updateDoc} />
       <span class="save-state" aria-live="polite">${save === 'saving' ? html`<span class="spinner" style="width:12px;height:12px"></span>` : html`<${Icon} name=${save === 'error' ? 'alert' : save === 'saved' ? 'check' : 'clock'} size=${15} />`}${saveLabel}</span>
       <span class="grow"></span>
       <${Btn} kind="ghost" size="sm" icon="eye" class="btn ghost sm prev-toggle" onClick=${() => setShowPrev(!showPrev)}>${showPrev ? 'إخفاء المعاينة' : 'معاينة'}</${Btn}>
@@ -188,7 +189,7 @@ export function Editor({ params }) {
               <input class="title-in" value=${section.title} onInput=${(e) => updateSection(section.id, { title: e.target.value })} aria-label="عنوان القسم" />
               <input class="sub-in" value=${section.subtitle || ''} placeholder="سطر تعريفي تحت العنوان (اختياري)" onInput=${(e) => updateSection(section.id, { subtitle: e.target.value })} aria-label="السطر التعريفي" />
             </div>
-            ${section.type !== 'custom' && html`<div class="regen">
+            ${(section.type !== 'custom' || meta?.ai?.enabled) && html`<div class="regen">
               ${undo && undo.id === section.id && html`<${Btn} kind="ghost" size="sm" icon="history" onClick=${undoRegen}>تراجع</${Btn}>`}
               <${Menu} align="left" trigger=${(t) => html`<button class="btn soft sm" disabled=${busy === 'regen'} onClick=${t}>${busy === 'regen' ? html`<span class="spinner" style="width:14px;height:14px"></span>` : html`<${Icon} name="refresh" size=${16} />`}إعادة توليد القسم</button>`}
                 items=${[{ label: 'صياغة جديدة بنفس الأسلوب', icon: 'refresh', onClick: () => regenerate(null) }, '-',
@@ -334,4 +335,59 @@ function SaveTemplate({ p, onClose }) {
       <div class="field"><span class="lbl">اسم القالب</span><${Input} value=${name} onInput=${setName} /></div>
       <div class="field"><span class="lbl">وصف مختصر</span><${TextArea} minRows=${2} value=${desc} onInput=${setDesc} /></div></div>
   </${Modal}>`;
+}
+
+// Real page count of the whole proposal (rendered off-screen), against the size asked for in the wizard.
+// «ملاءمة» trims until it fits: divider pages, «عن أهداف», the contents page, then the least essential sections.
+const FIT_DROP = ['about', 'content_plan', 'methodology', 'kpis', 'scope', 'objectives', 'understanding', 'intro'];
+
+function offscreen() {
+  let host = document.getElementById('page-count-host');
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'page-count-host';
+    host.setAttribute('aria-hidden', 'true');
+    host.style.cssText = 'position:absolute;left:-30000px;top:0;width:1300px;pointer-events:none';
+    document.body.appendChild(host);
+  }
+  return host;
+}
+
+async function countPages(proposal, settings) {
+  const r = await renderDocument(offscreen(), proposal, settings, { mode: 'print' });
+  offscreen().innerHTML = '';
+  return r.pageCount;
+}
+
+function PageBadge({ p, settings, updateDoc }) {
+  const [n, setN] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const t = useRef(null);
+  const target = p.doc?.target_pages || Number(p.inputs?.preferences?.pages) || null;
+  useEffect(() => {
+    clearTimeout(t.current);
+    t.current = setTimeout(() => countPages(p, settings).then(setN).catch(() => {}), 1200);
+    return () => clearTimeout(t.current);
+  }, [p.doc, settings]);
+  const fit = async () => {
+    setBusy(true);
+    try {
+      const d = JSON.parse(JSON.stringify(p.doc));
+      let count = await countPages({ ...p, doc: d }, settings);
+      const hide = (type) => { const s = d.sections.find((x) => x.type === type && x.visible !== false); if (!s) return false; s.visible = false; return true; };
+      const steps = [() => { const any = d.sections.some((s) => s.divider); d.sections.forEach((s) => { s.divider = false; }); return any; },
+        () => hide('about'), () => { if (d.show_toc === false) return false; d.show_toc = false; return true; }, ...FIT_DROP.slice(1).map((x) => () => hide(x))];
+      for (const step of steps) {
+        if (count <= target) break;
+        if (step()) count = await countPages({ ...p, doc: d }, settings);
+      }
+      updateDoc(() => d);
+      toast(count <= target ? `صار العرض ${count} صفحة. الأقسام المخفية تقدر ترجعها من القائمة (رمز العين).` : `قلّصنا العرض إلى ${count} صفحة. لتقليله أكثر اختصر نصوص بعض الأقسام.`);
+    } catch (e) { toastError(e); } finally { setBusy(false); }
+  };
+  if (n === null) return null;
+  const over = target && n > target + 1;
+  return html`<span class=${`page-badge ${over ? 'over' : ''}`} title="عدد صفحات العرض كاملًا">
+    <${Icon} name="file" size=${14} />${target ? `${n} من ${target} صفحة` : `${n} صفحة`}
+    ${over && html`<button class="btn soft sm" disabled=${busy} onClick=${fit}>${busy ? 'جارٍ…' : 'ملاءمة'}</button>`}</span>`;
 }

@@ -162,6 +162,8 @@ def regenerate_section(proposal_id: str, section_id: str, tone: str | None = Non
             ok = author.rewrite_section(p["doc"], fresh, p["inputs"], library, settings, p.get("meta") or {}, tone=tone)
         section = fresh if ok else None
     if section is None:
+        if current and current.get("type") not in engine.BUILDERS:
+            raise ValueError("هذا القسم كتبه Claude من طلبك، وإعادة كتابته تحتاج تفعيل Claude.")
         section = engine.regenerate_section(p["inputs"], p["doc"], section_id, library, settings, tone=tone)
     doc = p["doc"]
     doc["sections"] = [section if s["id"] == section_id else s for s in doc["sections"]]

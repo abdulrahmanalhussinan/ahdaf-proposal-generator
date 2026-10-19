@@ -4,19 +4,21 @@
 import { renderBlock, itemCount, sliceBlock } from './blocks.js';
 import { logoSVG, markSVG } from '../lib/brand.js';
 import { esc, rich, pad2 } from '../lib/format.js';
+import { art, ALIGN } from './art.js';
 
 const SECTION_ICON = {
   about: 'award', intro: 'text', understanding: 'eye', objectives: 'target', scope: 'layers', methodology: 'compass',
   deliverables: 'list', timeline: 'calendar', team: 'users', kpis: 'chart', governance: 'shield', assumptions: 'check',
-  risks: 'alert', budget: 'briefcase', past_projects: 'folder', conclusion: 'flag',
+  risks: 'alert', budget: 'briefcase', past_projects: 'folder', conclusion: 'flag', idea: 'spark', activations: 'rocket',
+  celebrities: 'star', content_plan: 'pen', custom: 'list',
 };
 
 // The four proposal designs. Logo colours per surface; the rest of each design lives in document.css.
 export const DESIGNS = {
-  ahdaf: { name: 'أهداف الكلاسيكي', note: 'غلاف بنفسجي وصفحات بيضاء ببطاقات ليلكية، بأسلوب عروض أهداف.', cover: '#fff', page: '#4C0192' },
-  night: { name: 'الليلي الفاخر', note: 'صفحات داكنة وتفاصيل ليلكية؛ للعلامات الفاخرة والفعاليات المسائية.', cover: '#fff', page: '#fff' },
-  bold: { name: 'العصري الجريء', note: 'غلاف مقسوم، وشريط عناوين بنفسجي، وبطاقات بإطار؛ حضور قوي.', cover: '#fff', page: '#fff' },
-  minimal: { name: 'الأبيض البسيط', note: 'مساحات بيضاء وخطوط رفيعة؛ أنيق ومناسب للجهات الرسمية.', cover: '#4C0192', page: '#4C0192' },
+  ahdaf: { name: 'أهداف الكلاسيكي', note: 'تموجات أهداف وإضاءة بنفسجية، والعناوين تبدأ من اليمين.', cover: '#fff', page: '#4C0192' },
+  night: { name: 'الليلي الفاخر', note: 'داكن بدوائر ولمسات ذهبية، والعناوين في المنتصف؛ للفعاليات والعلامات الفاخرة.', cover: '#fff', page: '#fff' },
+  bold: { name: 'العصري الجريء', note: 'أشكال هندسية وشريط عناوين قوي، والعناوين تبدأ من اليمين.', cover: '#fff', page: '#fff' },
+  minimal: { name: 'الأبيض الأنيق', note: 'أبيض بإضاءات ليلكية وخطوط ناعمة، والعناوين في المنتصف؛ للجهات الرسمية.', cover: '#4C0192', page: '#4C0192' },
 };
 const designOf = (doc) => (DESIGNS[doc?.theme] ? doc.theme : 'ahdaf');
 
@@ -37,16 +39,6 @@ function preloadImages(urls) {
   })));
 }
 
-function waves(color = '#B77BFF') {
-  // Flowing lines in the AHDAF purple family (decorative, behind cover/divider content)
-  const lines = [];
-  for (let i = 0; i < 9; i++) {
-    const y = 120 + i * 26;
-    lines.push(`<path d="M-20 ${y} C 260 ${y - 90 + i * 6}, 520 ${y + 110 - i * 4}, 820 ${y - 10} S 1180 ${y - 120 + i * 8}, 1320 ${y - 40}" stroke="${color}" stroke-opacity="${(0.16 + i * 0.035).toFixed(3)}" stroke-width="1.4" fill="none"/>`);
-  }
-  return `<svg class="deco-waves" viewBox="0 0 1280 400" preserveAspectRatio="none" aria-hidden="true">${lines.join('')}</svg>`;
-}
-
 function el(html) {
   const t = document.createElement('template');
   t.innerHTML = html.trim();
@@ -63,8 +55,9 @@ function coverPage(doc, ctx) {
   const s = ctx.settings || {};
   const photo = c.image ? `<div class="pg-photo" style="background-image:url('${esc(c.image)}')"></div>` : '';
   const clientLogo = c.client_logo ? `<div class="client-pill"><img src="${esc(c.client_logo)}" alt=""></div>` : '<span></span>';
+  const mark = ctx.design === 'night' ? '' : markSVG('#fff', ctx.layout === 'portrait' ? 520 : 600, 'deco-mark').replace('<svg ', '<svg style="left:-90px;bottom:-150px" ');
   return el(`<section class="pg pg--cover" data-kind="cover">${photo}
-    ${markSVG('#fff', ctx.layout === 'portrait' ? 520 : 600, 'deco-mark').replace('<svg ', '<svg style="left:-90px;bottom:-150px" ')}${waves()}
+    ${art(ctx.design, 'cover', ctx)}${mark}
     <div class="cover-in">
       <div class="cover-top">${logoSVG(ctx.logoCover, 46)}${clientLogo}</div>
       <div class="cover-main"><span class="cover-kicker">${esc(c.kicker || 'عرض فني')}</span><h1>${rich(c.title)}</h1>${c.subtitle ? `<p>${rich(c.subtitle)}</p>` : ''}</div>
@@ -82,8 +75,8 @@ function dividerPage(section, num, ctx) {
   const photo = section.image ? `<div class="pg-photo" style="background-image:url('${esc(section.image)}')"></div>` : '';
   const markPos = ctx.layout === 'portrait' ? 'left:-120px;bottom:-140px' : 'left:-80px;bottom:-160px';
   return el(`<section class="pg pg--divider" data-kind="divider" data-section="${esc(section.id)}">${photo}
-    ${section.image ? '' : markSVG('#fff', 560, 'deco-mark').replace('<svg ', `<svg style="${markPos}" `)}
-    ${waves()}
+    ${art(ctx.design, 'divider', { layout: ctx.layout, icon: section.image ? null : SECTION_ICON[section.type] })}
+    ${section.image || ctx.design === 'night' ? '' : markSVG('#fff', 560, 'deco-mark').replace('<svg ', `<svg style="${markPos}" `)}
     <div class="div-logo">${logoSVG(ctx.logoCover, 30)}</div>
     <div class="div-in"><span class="div-num">${num}</span><h2>${rich(section.title)}</h2>${section.subtitle ? `<p>${rich(section.subtitle)}</p>` : ''}</div>
   </section>`);
@@ -92,7 +85,7 @@ function dividerPage(section, num, ctx) {
 function closingPage(ctx) {
   const s = ctx.settings || {};
   const contacts = [s.website, s.email, s.phone].filter(Boolean).map((x) => `<span>${esc(x)}</span>`).join('');
-  return el(`<section class="pg pg--closing" data-kind="closing">${markSVG('#fff', 640, 'deco-mark').replace('<svg ', '<svg style="right:-160px;top:-180px" ')}${waves()}
+  return el(`<section class="pg pg--closing" data-kind="closing">${art(ctx.design, 'closing', ctx)}${ctx.design === 'night' ? '' : markSVG('#fff', 640, 'deco-mark').replace('<svg ', '<svg style="right:-160px;top:-180px" ')}
     <div class="close-in">${logoSVG(ctx.logoCover, 64)}<div class="tag">${esc(s.tagline || 'نربط الإبداع بالهدف')}</div><div class="bar"></div>
       <h2>شكرًا لكم</h2><p>${rich(ctx.closingLine || '')}</p>
       <div class="close-contacts">${contacts}${s.address ? `<span>${esc(s.address)}</span>` : ''}</div></div></section>`);
@@ -103,8 +96,8 @@ function contentPage(ctx, section, num, first) {
   const titleHtml = first
     ? `<div class="pg-title"><div class="pg-kicker">${esc(num)}${section.title_en ? ` · ${esc(section.title_en)}` : ''}</div><h2>${rich(section.title)}</h2>${section.subtitle ? `<p class="sub">${rich(section.subtitle)}</p>` : ''}</div>`
     : `<div class="pg-title cont"><h2>${rich(section.title)}<span>(تابع)</span></h2></div>`;
-  const airy = ['intro', 'conclusion'].includes(section.type) ? markSVG('#4C0192', 300, 'pg-deco') : '';
-  const page = el(`<section class="pg pg--content ${ctx.tight ? 'tight' : ''}" data-kind="content" data-section="${esc(section.id)}">${airy}
+  const airy = ctx.design === 'ahdaf' && ['intro', 'conclusion'].includes(section.type) ? markSVG('#4C0192', 300, 'pg-deco') : '';
+  const page = el(`<section class="pg pg--content ${ctx.tight ? 'tight' : ''}" data-kind="content" data-section="${esc(section.id)}">${art(ctx.design, 'content', { layout: ctx.layout, icon: first ? SECTION_ICON[section.type] : null })}${airy}
     <header class="pg-head">${titleHtml}<div class="pg-brand">${clientLogo}${logoSVG(ctx.logoPage, 30)}</div></header>
     <div class="pg-body"></div>
     <footer class="pg-foot"><span>${esc(ctx.footer)}</span><span class="num"></span></footer></section>`);
@@ -238,7 +231,7 @@ export async function renderDocument(host, proposal, settings, options = {}) {
 
   const design = designOf(doc);
   const ctx = {
-    layout, settings: settings || {}, number: proposal.number,
+    layout, design, settings: settings || {}, number: proposal.number,
     logoCover: DESIGNS[design].cover, logoPage: DESIGNS[design].page,
     clientLogo: doc.cover?.client_logo || null,
     footer: `عرض فني — ${(doc.cover?.title || '').replace(/\[\[|\]\]/g, '')}`,
@@ -250,6 +243,7 @@ export async function renderDocument(host, proposal, settings, options = {}) {
   root.className = `doc ${options.mode === 'print' ? 'print' : 'screen'} ${options.clean ? 'print-clean' : ''}`;
   root.dataset.layout = layout;
   root.dataset.theme = design;
+  root.dataset.align = ALIGN[design] || 'start';
   root.style.visibility = 'hidden';
   host.appendChild(root);
 

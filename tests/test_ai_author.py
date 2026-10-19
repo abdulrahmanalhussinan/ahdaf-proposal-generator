@@ -129,3 +129,35 @@ def test_clean_keeps_counts_and_years_but_not_invented_metrics():
     assert author.clean("نرفع المبيعات 40%. ونبني الحضور.", allowed) == "ونبني الحضور."
     assert author.clean("جمهور يتجاوز 500 ألف شخص.", allowed) == ""
     assert author.clean("خلال 6 أشهر.", allowed) == "خلال 6 أشهر."
+
+
+def test_page_target_sizes_the_proposal(library, settings):
+    from app.generator import engine
+    small = engine.generate(make_inputs(preferences={"pages": 10}), library, settings, seed=1)["doc"]
+    big = engine.generate(make_inputs(preferences={"pages": 35}), library, settings, seed=1)["doc"]
+    assert small["target_pages"] == 10 and big["target_pages"] == 35
+    assert len(small["sections"]) < len(big["sections"])
+    assert not any(s["divider"] for s in small["sections"]) and any(s["divider"] for s in big["sections"])
+    assert not {"team", "governance", "risks"} & {s["type"] for s in big["sections"]}  # never padded with filler
+    req = svc.ai_request(inputs=make_inputs(preferences={"pages": 35}))["requests"][0]
+    assert "نحو 35 صفحة" in req["prompt"] and "(المساحة: نحو" in req["prompt"]
+
+
+def test_detailed_brief_is_followed_and_can_add_sections(library, settings, monkeypatch):
+    brief = "ابي قسم عن تجربة العميل داخل الفرع، و3 فعاليات في بوليفارد"
+    inputs = make_inputs(project={"brief": brief})
+    stage2 = svc.ai_request(inputs=inputs, concept={"idea": {"name": "س"}})["requests"]
+    closing = next(r for r in stage2 if "conclusion" in r["sections"])
+    assert "custom_sections" in closing["sections"] and brief in closing["prompt"]
+    from app.generator import engine
+    lib, st = svc._context(inputs)
+    doc = engine.generate(inputs, lib, st, seed=2)["doc"]
+    answer = {"custom_sections": [{"title": "تجربة العميل داخل الفرع", "subtitle": "", "paragraphs": ["فقرة."], "points": ["نقطة"], "cards": []}],
+              "methodology": {"subtitle": "", "intro": "", "timeline_subtitle": "إيقاع أسبوعي", "timeline_intro": "جدول مبني على المراحل.", "phases": [
+                  {"title": "أ", "role": "plan", "weight": 2, "goal": "", "activities": ["١"], "outputs": [], "owner": "مدير المشروع"},
+                  {"title": "ب", "role": "execute", "weight": 6, "goal": "", "activities": ["٢"], "outputs": [], "owner": "فريق المحتوى"}]}}
+    author.apply(doc, answer, inputs, lib, st)
+    types = [s["type"] for s in doc["sections"]]
+    assert types.index("custom") == types.index("conclusion") - 1
+    tl = next(s for s in doc["sections"] if s["type"] == "timeline")
+    assert tl["subtitle"] == "إيقاع أسبوعي" and tl["blocks"][0]["text"] == "جدول مبني على المراحل."

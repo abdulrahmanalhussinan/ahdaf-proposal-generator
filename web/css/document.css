@@ -253,3 +253,8 @@
   .doc.screen .pg { margin: 0; box-shadow: none; border-radius: 0; }
   .doc { zoom: 1 !important; }
 }
+
+/* ---------- artwork layer (art.js) ---------- */
+.pg-art { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+.pg--content > .pg-head, .pg--content > .pg-body, .pg--content > .pg-foot { position: relative; z-index: 1; }
+.div-in, .div-logo, .close-in, .cover-in { z-index: 2; }
